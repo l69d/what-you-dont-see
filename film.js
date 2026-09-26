@@ -192,7 +192,7 @@ function main() {
   // ---------- reel: title ----------
   let compiling = null, compiled = false;   // the shaders compile in the background while the title shows
   REELS.title = {
-    words: [[0, 1e9, "Where the holes aren’t", "big mid"]],
+    words: [[0, 1e9, "What We Don’t See", "big mid"]],
     subs: [[0, 1e9, "A short film you play. About four minutes, with sound."]],
     enter() {
       const [b] = ui([{ label: "Begin", cls: "primary", onClick: begin }]);
@@ -233,7 +233,7 @@ function main() {
   let OPEN = [];
   REELS.open = {
     words: [[1.2, 3.1, "1943."], [3.3, 5.5, "Every plane"], [5.5, 7.8, "that comes home"], [7.8, 9.7, "brings back"],
-      [9.7, 11.9, "a story."], [14.6, 19.4, "Where the holes aren’t", "big mid"]],
+      [9.7, 11.9, "a story."], [14.6, 19.4, "What We Don’t See", "big mid"]],
     dur: 21,
     enter() {
       OPEN = schedule(MONTAGE, 3.2, 11.6, REDUCED ? .9 : .7, REDUCED ? .9 : .34);
@@ -650,7 +650,7 @@ function main() {
     const yours = YOUR.lost ? "Your plane was lost over Germany." : `Your plane came home with ${plural(YOUR.hits.length, "hole")}.`;
     const chose = CHOICE < 0 ? "" : ` You armoured the ${["engines", "wings and tail", "fuselage"][CHOICE]}.`;
     $("#roll .credits").innerHTML =
-      `<p>Where the holes aren’t</p>` +
+      `<p>What We Don’t See</p>` +
       `<p>Directed by you<small>${yours}${chose}</small></p>` +
       `<p>Written, drawn and scored with Claude<small>${lines.toLocaleString()} lines of shader code, one synthesizer, no footage.</small></p>` +
       `<p>The reasoning is Abraham Wald’s<small>Statistical Research Group, 1943. The 300 sorties and their holes are an illustrative simulation.</small></p>`;
