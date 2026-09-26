@@ -16,6 +16,14 @@ Classic `<script>` files share one global, `window.HOLES`, so the page runs from
 | `film.js`, `index.html` | the director: story, words, interaction, camera, transitions |
 | `lab.html` | still-frame bench for any scene or medium, driven by URL parameters |
 
+## Programs
+
+Every medium and every scene is its own small shader program. Each program includes all the shared code, but its `main()` reaches only one medium or scene, and the compiler drops the rest.
+- **Why:** one giant shader took about 20 s to compile; a single medium takes about 1 s.
+- **Film:** `compileAll()` compiles the programs in parallel (`KHR_parallel_shader_compile`) while the title shows.
+- **Lab:** compiles only what it draws, when it draws it.
+- **Failures:** a program that fails to compile falls back to the plain fallback program (`m0`) and is logged.
+
 ## Coordinates
 
 - `q`: screen position, y from -0.5 (bottom) to 0.5 (top), x scaled by the aspect ratio (2.39:1 frame, so x is about ±1.2).

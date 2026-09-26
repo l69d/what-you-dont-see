@@ -373,7 +373,7 @@ function main() {
   };
 
   // ---------- reel: the count (scene 0, press and hold) ----------
-  const COUNT = { intro: 3.4, hold: 14, cuts: ["metal", "embroidery", "halftone", "stainedglass", "cells", "collage", "engraving",
+  const COUNT = { intro: 3.4, hold: 7, cuts: ["metal", "embroidery", "halftone", "stainedglass", "cells", "collage", "engraving",
     "constellation", "ink", "xray", "blueprint", "thermal"] };
   const COUNT_END = COUNT.intro + COUNT.hold;
   const P2W = (L, x, y) => { const p = L.plane; return [p[0] + x * p[2], p[1] + y * p[2]]; };
@@ -398,10 +398,11 @@ function main() {
   let countShown = 0;
   REELS.count = {
     chapter: "III. The count",
-    words: [[.5, 2.2, "In the hangars,", "top"], [2.2, 4.2, "they count every hole.", "top"], [4.6, 7.8, "Every hole", "top"], [7.8, 11.2, "on every plane", "top"],
-      [11.2, 15, "that came home.", "top"], [18.8, 22.6, "The pattern looks clear.", "top"]],
-    subs: [[18, 27, "Holes per plane, averaged over the 250 planes that came home."]],
-    dur: 27,
+    // seven seconds of holding; everything after the count is timed from its end (COUNT_END = 10.4)
+    words: [[.5, 2.2, "In the hangars,", "top"], [2.2, 4.2, "they count every hole.", "top"], [4.3, 6.2, "Every hole", "top"], [6.2, 8.3, "on every plane", "top"],
+      [8.3, 11, "that came home.", "top"], [11.6, 15.4, "The pattern looks clear.", "top"]],
+    subs: [[10.8, 19.6, "Holes per plane, averaged over the 250 planes that came home."]],
+    dur: 19.6,
     rate: t => (t < COUNT.intro || t >= COUNT_END) ? 1 : film.hold ? 1 : 0,
     waiting: t => t >= COUNT.intro && t < COUNT_END && !film.hold,
     enter() {
@@ -410,8 +411,8 @@ function main() {
       const n = COUNT.cuts.length, len = COUNT.hold / n;
       for (let i = 1; i < n; i++) cue(COUNT.intro + i * len, () => au("tick"));
       cue(COUNT_END, () => { ui([]); au("bell", 0); film.hold = false; });
-      cue(17.8, () => labels(zoneLabels(17.9)));
-      if (!YOUR.lost) subs.push({ a: 22.8, b: 27, text: `Your plane’s ${plural(YOUR.hits.length, "hole")} are in there too, in gold.` });
+      cue(COUNT_END + .2, () => labels(zoneLabels(COUNT_END + .3)));
+      if (!YOUR.lost) subs.push({ a: 15.6, b: 19.6, text: `Your plane’s ${plural(YOUR.hits.length, "hole")} are in there too, in gold.` });
       cue(COUNT.intro, () => {
         ui([{ html: `<svg viewBox="0 0 26 26" aria-hidden="true"><circle class="track" cx="13" cy="13" r="11"/><circle class="fill" cx="13" cy="13" r="11"/></svg>Hold to count`,
           cls: "hold primary", onDown: () => { film.hold = true; } }]);
@@ -711,7 +712,9 @@ function main() {
     requestAnimationFrame(frame);
     try { step(now); } catch (e) { console.error(e); if (film.id !== "title") go("title"); }
   }
+  let rawDt = 0;
   function step(now) {
+    rawDt = now - last;
     const dtms = Math.min(100, now - last), dt = dtms / 1000;
     last = now;
     film.clock += dt;
@@ -749,7 +752,7 @@ function main() {
   }
 
   // ---------- start ----------
-  if (Q.has("debug")) window.__film = { get id() { return film.id; }, get t() { return film.t; }, get fps() { return Math.round(1000 / ftAvg); }, get scale() { return scale; } };
+  if (Q.has("debug")) window.__film = { get id() { return film.id; }, get t() { return film.t; }, get fps() { return Math.round(1000 / ftAvg); }, get scale() { return scale; }, get rawDt() { return rawDt; }, get hold() { return film.hold; } };
   const STRIP = Q.get("strip");   // "open@2,raid@20,..." renders many moments into one contact sheet (pictures only)
   if (STRIP) {
     YOUR = M.pickSortie(S, M.rng(+(Q.get("seed") || 3)), FATE);

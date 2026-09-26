@@ -6,14 +6,14 @@ Before the judges arrive, open `index.html?talk&fate=lost` fullscreen with sound
 - Hand the judges the mouse: they claim the plane, hold to count, and choose the armour.
 - ← and → jump between chapters.
 
-The whole film runs about 4½ minutes. Skipping II (Home) and VII (the echo) brings it to about 3½.
+The whole film runs about 4 minutes. Skipping II (Home) and VII (the echo) brings it to about 3.
 
 | chapter | length | who does what |
 |---|---|---|
 | Cold open | 24 s | nothing: let the montage play |
 | I. The raid | about 50 s | the judge clicks the gold-outlined plane when "This one is yours" appears |
 | II. Home | 23 s | skippable with → |
-| III. The count | about 28 s | the judge holds the mouse button (or Space) until the count completes |
+| III. The count | about 20 s | the judge holds the mouse button (or Space) for about 7 s, until the count completes |
 | IV. The decision | about 12 s | the judge clicks a part of the plane |
 | V. The question | about 20 s | press Show me (or Enter) |
 | VI. The missing | about 57 s | the ghosts rise, then the reveal |
