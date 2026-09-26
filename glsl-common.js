@@ -198,7 +198,7 @@ vec3 sceneSubject(vec2 p, vec2 q, vec2 suv) {
 
   if (uShape > .5) {
     // hover: the zone under the pointer glows gold at its edge
-    if (uFX2.y > 0. && gZone == int(uFX2.x)) {
+    if (uFX2.y > 0. && gZone >= 0 && gZone == int(uFX2.x)) {
       float zd = zoneD(lq, gZone) * uPlane.z;
       col = mix(col, col * 1.12 + vec3(.18, .13, .05), uFX2.y * .6);
       col += goldGlow(uFX2.y) * (stroke(zd, .0015 * uCam.z, gPix * 1.5) + .35 * exp(zd / (.012 * uCam.z)));

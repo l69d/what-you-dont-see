@@ -228,6 +228,7 @@ void main() {
         if (this.pending[k]) { this.progs[k] = this._finish(this.pending[k], this.names[k]); delete this.pending[k]; }
         else this.progs[k] = this._prog(VS_QUAD, this.sources[k], this.names[k]);
       }
+      if (this.progs[k].failed && k !== "m0") return this.program({ scene: 0, medium: -1 });   // drawn plainly rather than not at all
       return this.progs[k];
     }
     _start(fs, vs = VS_QUAD) {
@@ -250,6 +251,7 @@ void main() {
           this.errors += `[${name}] ${log}\n${ctx}\n`;
         }
         this.errors += `[${name} link] ${gl.getProgramInfoLog(p)}\n`;
+        p.failed = true;
       }
       const U = {}, n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS) || 0;
       for (let i = 0; i < n; i++) { const u = gl.getActiveUniform(p, i), key = u.name.replace(/\[0\]$/, ""); U[key] = gl.getUniformLocation(p, u.name); }

@@ -28,7 +28,8 @@ function main() {
   const INK = id => (H.mediaDefs.find(m => m.id === id) || {}).ink || "light";
   // a few media are painted dark (a hangar at night, old stone, wood); lift them for bright rooms
   const LIFT = { metal: 1.3, stone: 1.22, treerings: 1.2, sun: 1.1 };
-  const lift = (L, P) => { if (L.scene !== 0) return; const m = H.mediaDefs.find(m => m.id === L.medium); if (m && LIFT[m.name]) P.exposure *= LIFT[m.name]; };
+  const liftOf = L => { if (!L || L.scene !== 0) return 1; const m = H.mediaDefs.find(m => m.id === L.medium); return (m && LIFT[m.name]) || 1; };
+  const lift = (L, P, B) => { P.exposure *= B && P.mix > 0 ? lerp(liftOf(L), liftOf(B), P.mix) : liftOf(L); };
   const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
 
   // when lost holes land on the drawing (mirrors the hole vertex shader)
@@ -53,7 +54,7 @@ function main() {
   let FW = 0, FH = 0, scale = +(Q.get("scale") || BASE), cap = 1;   // cap: the heaviest reels start a little softer
   function layout() {
     const vw = innerWidth, vh = innerHeight, minBar = vh < 560 ? 64 : 100;
-    let fw = vw, fh = vw >= vh ? Math.round(vw / 2.39) : Math.round(vw / 1.15);
+    let fw = vw, fh = Math.round(vw / 2.39);
     if (fh > vh - 2 * minBar) { fh = Math.max(180, vh - 2 * minBar); if (vw >= vh) fw = Math.min(vw, Math.round(fh * 2.39)); }
     FW = fw; FH = fh;
     const r = document.documentElement.style;
@@ -120,7 +121,7 @@ function main() {
     let s = "";
     if (subOverride != null) s = subOverride;
     else for (const c of subs) if (t >= c.a && t < c.b) s = c.text;
-    if (s !== subShown) { subShown = s; subEl.textContent = s; if (s) say(s); }
+    if (s !== subShown) { subShown = s; subEl.textContent = s; if (s && !(subOverride != null && /\d/.test(s))) say(s); }
   }
   function labels(list) {
     labelsEl.textContent = "";
@@ -132,6 +133,7 @@ function main() {
       labelsEl.appendChild(el);
       return { a: 0, b: 1e9, ...l, el };
     });
+    if (list.length) say(list.map(l => l.small ? `${l.small}: ${l.big}` : l.big).join(". "));
   }
   function drawLabels(L, t) {
     for (const l of labs) {
@@ -174,6 +176,7 @@ function main() {
     if (R.subs) subs = R.subs.map(([a, b, text]) => ({ a, b, text }));
     if (R.cues) for (const [t, fn] of R.cues) cue(t, fn);
     if (R.enter) R.enter();
+    if (id === "title" && scale !== BASE) { scale = BASE; layout(); }
     if ((R.cap || 1) !== cap) { cap = R.cap || 1; layout(); }
   }
   const next = () => go(ORDER[ORDER.indexOf(film.id) + 1] || "title");
@@ -195,13 +198,14 @@ function main() {
     words: [[0, 1e9, "What We Don’t See", "big mid"]],
     subs: [[0, 1e9, "A short film you play. About four minutes, with sound."]],
     enter() {
+      au("mood", "title", 3);
       const [b] = ui([{ label: "Begin", cls: "primary", onClick: begin }]);
       if (compiled) return;
       b.el.disabled = true; b.el.textContent = "Preparing the film";
       compiling = compiling || E.compileAll((d, n) => { if (b.el.isConnected && !compiled) b.el.textContent = `Preparing the film ${Math.round(d / n * 100)}%`; });
       compiling.then(err => {
         compiled = true;
-        if (err) { $("#fail").hidden = false; $("#fail pre").textContent = err; document.title = "error"; return; }
+        if (err) console.warn("Some shaders failed and will be drawn plainly:\n" + err);
         if (b.el.isConnected) { b.el.disabled = false; b.el.textContent = "Begin"; if (lastKeyboard) b.el.focus({ preventScroll: true }); }
       });
     },
@@ -270,6 +274,7 @@ function main() {
     words: [[.8, 3.2, "Over Germany."], [3.4, 6.1, "On the worst raids of 1943,"], [6.1, 8.2, "one bomber in six"],
       [8.2, 10.6, "doesn’t come home."], [10.9, 13.3, "Ten men in each."], [13.5, 1e9, "This one is yours.", "claim"]],
     enter() { claimAt = null; au("mood", "dawn", 2); au("engines", .7, 0); au("wind", .3); },
+    exit() { for (const k of ["engines", "wind", "tension", "fire"]) au(k, 0); },
     dur: () => claimAt == null ? 1e9 : claimAt + skyBeats().end,
     waiting: t => claimAt == null && t > 13.5,
     layers(t, L, P) {
@@ -304,7 +309,7 @@ function main() {
   function claim() {
     claimAt = film.t; subOverride = null; frameEl.className = "";
     endWord("claim", claimAt + .4);
-    au("claim");
+    au("claim"); au("mood", "raid", 3);
     const s = H.scenes.sky && H.scenes.sky.state && H.scenes.sky.state.your;
     if (s) { const [sx, sy] = toScreen(film.L, [s.x, s.y]); ripple(sx, sy); } else ripple(FW / 2, FH / 2);
     const b = skyBeats(), c0 = claimAt, hits = b.yourHits || [], lastHit = hits.length ? hits[hits.length - 1] : 18;
@@ -357,7 +362,6 @@ function main() {
       const f = H.scenes.field;
       if (f) { L.scene = 2; f.update(t, L, E, { sim: S, your: YOUR, reduced: REDUCED }); }
       else { L.scene = 0; L.medium = MID("collage"); L.shape = 1; L.cam = [0, 0, 1.9, 0]; }
-      P.fade = 1 - seg(t, 0, 1.2);
     },
     tick(t) {
       const f = H.scenes.field, landed = f && f.state && f.state.landed != null ? f.state.landed : Math.floor(seg(t, 2, 14) * 30);
@@ -365,6 +369,7 @@ function main() {
       else subOverride = null;
       au("engines", .45 * (1 - landed / 30), 0);
     },
+    exit() { au("engines", 0); },
   };
 
   // ---------- reel: the count (scene 0, press and hold) ----------
@@ -400,7 +405,7 @@ function main() {
     rate: t => (t < COUNT.intro || t >= COUNT_END) ? 1 : film.hold ? 1 : 0,
     waiting: t => t >= COUNT.intro && t < COUNT_END && !film.hold,
     enter() {
-      countShown = 0;
+      countShown = 0; this._last = 0;
       au("mood", "hangar", 2.5); au("engines", 0);
       const n = COUNT.cuts.length, len = COUNT.hold / n;
       for (let i = 1; i < n; i++) cue(COUNT.intro + i * len, () => au("tick"));
@@ -426,6 +431,7 @@ function main() {
       countShown = L.holes.ret;
     },
     tick(t) {
+      if (t >= COUNT.intro && t < COUNT_END && !film.hold && (film.down || film.spaceDown)) film.hold = true;
       if (t >= COUNT.intro && t < COUNT_END) {
         subOverride = film.hold ? `${countShown} holes` : countShown ? "Hold to keep counting." : "Press and hold, anywhere, to count the holes.";
         const b = uiEl.querySelector("button.hold");
@@ -438,15 +444,16 @@ function main() {
     down() { if (film.t >= COUNT.intro && film.t < COUNT_END) film.hold = true; },
     up() { film.hold = false; },
     key(k, down) { if (k === " " || k === "Enter") { if (film.t >= COUNT.intro && film.t < COUNT_END) film.hold = down; return true; } },
+    keyUp: true,
   };
 
   // ---------- reel: the decision ----------
-  let hover = -1, hoverK = 0, choiceAt = null;
+  let hover = -1, hoverOn = false, hoverK = 0, choiceAt = null;
   REELS.decide = {
     chapter: "IV. The decision",
     words: [[.5, 2.9, "Armour is heavy.", "top"], [2.9, 5.7, "A bomber can carry only a little.", "top"], [5.9, 1e9, "Where does it go?", "top ask"]],
     enter() {
-      hover = -1; hoverK = 0; choiceAt = null; CHOICE = -1;
+      hover = -1; hoverOn = false; hoverK = 0; choiceAt = null; CHOICE = -1;
       au("mood", "decision", 2);
       labels(zoneLabels(0));
       cue(5.9, () => {
@@ -468,11 +475,13 @@ function main() {
         P.fade = seg(t, choiceAt + 4.8, choiceAt + 5.6);
       }
     },
-    tick(t, dt) { hoverK += ((hover >= 0 ? 1 : 0) - hoverK) * Math.min(1, dt * 8); },
+    tick(t, dt) { hoverK += ((hoverOn ? 1 : 0) - hoverK) * Math.min(1, dt * 8); },
     move(x, y) {
       if (choiceAt != null || film.t < 5.9) return;
       const w = toWorld(film.L, x, y), pl = toPlane(film.L, w), z = M.zoneAt(pl[0], pl[1]);
-      if (z !== hover) { hover = z; if (z >= 0) au("tick"); }
+      if (z >= 0 && z !== hover) au("tick");
+      if (z >= 0) hover = z;
+      hoverOn = z >= 0;
       frameEl.className = z >= 0 ? "pointer" : "";
     },
     down(x, y) {
@@ -483,7 +492,7 @@ function main() {
     key(k) { if (choiceAt == null && film.t > 5.9 && "123".includes(k) && k.length === 1) { choose(ZONE_BUTTONS[+k - 1][0]); return true; } },
   };
   function choose(z) {
-    CHOICE = z; choiceAt = film.t; hover = z; hoverK = 1;
+    CHOICE = z; choiceAt = film.t; hover = z; hoverOn = true; hoverK = 1;
     { const c = [[-.37, .24], [-.62, .05], [0, .1]][z], [sx, sy] = toScreen(film.L, [c[0], c[1]]); ripple(sx, sy); }
     ui([]); subOverride = null; frameEl.className = "";
     endWord("ask", choiceAt + .3);
@@ -575,7 +584,7 @@ function main() {
       // up to watch the ghosts, then down to the two drawings
       const up = ez(seg(t, .5, 3.4)), back = ez(seg(t, 11, 13.5));
       L.cam = [lerp(.45 * up, 0, back), lerp(.62 * up, .05, back), lerp(lerp(1.9, 2.95, e), 2.55, back), 0];
-      L.holes.ret = RET; L.holes.lost = LOST; L.holes.fall = t - 4; L.holes.gain = .12;
+      L.holes.ret = RET; L.holes.lost = LOST; L.holes.fall = Math.max(0, t - 4); L.holes.gain = .12;
       L.holes.your = YOUR.id;
       L.fx = [1, 5, -1, 0];
       L.fx2 = [-1, 0, 1, 50];
@@ -590,7 +599,7 @@ function main() {
         if (CHOICE === 0) L.fx = [1, 5, 0, ez(seg(t, 28.4, 30.2))];
         else if (CHOICE > 0 && t < 30.4) L.fx = [1, 5, CHOICE, ez(seg(t, 28.1, 29.2)) * (1 - ez(seg(t, 29.5, 30.4)))];
         else L.fx = [1, 5, 0, ez(seg(t, 30.5, 32.3))];
-        P.flash = .18 * pulse(t, CHOICE === 0 ? 30.2 : 32.3, 5);
+        P.flash = .18 * pulse(t, CHOICE === 0 ? 30.2 : 32.3, 5) * (REDUCED ? .3 : 1);
       }
       P.fade = seg(t, 34.8, 36);
     },
@@ -661,25 +670,28 @@ function main() {
 
   // ---------- input ----------
   const local = e => { const r = frameEl.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
-  frameEl.addEventListener("pointerdown", e => { touch(); lastKeyboard = false; const [x, y] = local(e); if (film.R.down) film.R.down(x, y, e); });
+  frameEl.addEventListener("pointerdown", e => { if (e.button !== 0) return; touch(); lastKeyboard = false; const [x, y] = local(e); if (film.R.down) film.R.down(x, y, e); });
+  frameEl.addEventListener("contextmenu", e => e.preventDefault());
+  addEventListener("pointerdown", e => { if (e.button === 0) film.down = true; }, true);
   frameEl.addEventListener("pointermove", e => { const [x, y] = local(e); if (film.R.move) film.R.move(x, y, e); });
-  addEventListener("pointerup", () => { if (film.R.up) film.R.up(); film.hold = false; });
-  addEventListener("pointercancel", () => { film.hold = false; });
-  addEventListener("blur", () => { film.hold = false; });
+  addEventListener("pointerup", () => { film.down = false; if (film.R.up) film.R.up(); film.hold = false; });
+  addEventListener("pointercancel", () => { film.down = false; film.hold = false; });
+  addEventListener("blur", () => { film.down = film.spaceDown = false; film.hold = false; });
   addEventListener("keydown", e => {
     touch(); lastKeyboard = true;
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     if (e.key === "m" || e.key === "M") { toggleSound(); return; }
-    if (TALK && e.key === "ArrowRight") { next(); return; }
-    if (TALK && e.key === "ArrowLeft") { go(ORDER[Math.max(0, ORDER.indexOf(film.id) - 1)]); return; }
+    if (e.key === " ") film.spaceDown = true;
+    if (TALK && (e.key === "ArrowRight" || e.key === "PageDown")) { e.preventDefault(); if (film.id === "title") { if (compiled) begin(); } else next(); return; }
+    if (TALK && (e.key === "ArrowLeft" || e.key === "PageUp")) { e.preventDefault(); go(ORDER[Math.max(0, ORDER.indexOf(film.id) - 1)]); return; }
     if (e.target.tagName === "BUTTON" && (e.key === "Enter" || e.key === " ") && !uiEl.querySelector("button.hold")) return;   // let the focused button click
     if (film.R.key && film.R.key(e.key, true)) { e.preventDefault(); return; }
     if (e.key === " " || e.key === "Enter") {
-      const b = uiEl.querySelector("button.primary") || uiEl.querySelector("button");
+      const b = uiEl.querySelector("button.primary");
       if (b && !b.classList.contains("hold")) { e.preventDefault(); b.click(); }
     }
   });
-  addEventListener("keyup", e => { if (film.R.key) film.R.key(e.key, false); });
+  addEventListener("keyup", e => { if (e.key === " ") film.spaceDown = false; if (film.R.key && film.R.keyUp) film.R.key(e.key, false); });
 
   const soundBtn = $("#sound");
   function toggleSound() {
@@ -688,24 +700,29 @@ function main() {
     soundBtn.textContent = off ? "Sound off" : "Sound on";
     soundBtn.setAttribute("aria-pressed", String(!off));
   }
-  soundBtn.addEventListener("click", toggleSound);
+  soundBtn.addEventListener("click", () => { toggleSound(); soundBtn.blur(); });
 
   // ---------- the loop ----------
   const ptr = [0, 0], par = [0, 0];
   addEventListener("pointermove", e => { ptr[0] = e.clientX / innerWidth * 2 - 1; ptr[1] = e.clientY / innerHeight * 2 - 1; });
   let last = performance.now(), ftAvg = 16, lastAdjust = 0;
+  cv.addEventListener("webglcontextlost", e => { e.preventDefault(); setTimeout(() => location.reload(), 800); });
   function frame(now) {
+    requestAnimationFrame(frame);
+    try { step(now); } catch (e) { console.error(e); if (film.id !== "title") go("title"); }
+  }
+  function step(now) {
     const dtms = Math.min(100, now - last), dt = dtms / 1000;
     last = now;
     film.clock += dt;
     const R = film.R;
     film.t += dt * (R.rate ? R.rate(film.t) : 1);
     for (const c of film.cues) if (!c.done && film.t >= c.t) { c.done = true; try { c.fn(); } catch (e) { console.error(e); } }
-    if (film.R !== R) { requestAnimationFrame(frame); return; }
+    if (film.R !== R) return;
     const L = H.layer(), P = H.post();
     if (REDUCED) P.weave = 0;
     const B = R.layers(film.t, L, P, dt) || outro(R, film.t, P);
-    lift(L, P);
+    lift(L, P, B);
     // a little parallax with the pointer, so the frame feels like a lens you can lean into
     if (!REDUCED) {
       par[0] += (ptr[0] - par[0]) * Math.min(1, dt * 2.5); par[1] += (ptr[1] - par[1]) * Math.min(1, dt * 2.5);
@@ -727,9 +744,8 @@ function main() {
     ftAvg = ftAvg * .94 + dtms * .06;
     if (film.clock - lastAdjust > 2.5 && film.clock > 4) {
       if (ftAvg > 26 && scale > .5) { scale = Math.max(.5, scale * .84); layout(); lastAdjust = film.clock; ftAvg = 16; }
-      else if (ftAvg < 13 && scale < BASE) { scale = Math.min(BASE, scale * 1.1); layout(); lastAdjust = film.clock; ftAvg = 16; }
+      else if (ftAvg < 17.5 && scale < BASE && film.clock - lastAdjust > 8) { scale = Math.min(BASE, scale * 1.1); layout(); lastAdjust = film.clock; ftAvg = 16; }
     }
-    requestAnimationFrame(frame);
   }
 
   // ---------- start ----------
@@ -748,7 +764,7 @@ function main() {
       CHOICE = Q.has("choice") ? +Q.get("choice") : 1;
       go(id);
       if (id === "raid" && +at > 13.6) { film.t = 13.6; claim(); }
-      if (id === "decide") { choiceAt = +at > 9 ? 6 : null; hover = 0; hoverK = 1; }
+      if (id === "decide") { choiceAt = +at > 9 ? 6 : null; hover = 0; hoverOn = true; hoverK = 1; }
       film.t = +at;
       const L = H.layer(), P = H.post(), B = film.R.layers(film.t, L, P, 0) || outro(film.R, film.t, P);
       E.render(L, B, P, film.t);
@@ -766,14 +782,14 @@ function main() {
     CHOICE = Q.has("choice") ? +Q.get("choice") : -1;
     go(id);
     if (id === "raid" && +at > +(Q.get("claim") || 13.6)) { film.t = +(Q.get("claim") || 13.6); claim(); }
-    if (id === "decide" && CHOICE >= 0) { choiceAt = 6; hover = CHOICE; hoverK = 1; }
-    if (id === "decide" && Q.has("hover")) { hover = +Q.get("hover"); hoverK = 1; }
+    if (id === "decide" && CHOICE >= 0) { choiceAt = 6; hover = CHOICE; hoverOn = true; hoverK = 1; }
+    if (id === "decide" && Q.has("hover")) { hover = +Q.get("hover"); hoverOn = true; hoverK = 1; }
     if (id === "wald" && Q.has("show")) showAt = +Q.get("show");
     film.t = +at || 0;
     for (const c of film.cues) if (c.t <= film.t) { c.done = true; if (/labels|rollCredits/.test(String(c.fn))) c.fn(); }
     const L = H.layer(), P = H.post();
     const B = film.R.layers(film.t, L, P, 0) || outro(film.R, film.t, P);
-    lift(L, P);
+    lift(L, P, B);
     film.L = L;
     if (film.R.tick) film.R.tick(film.t, 0, L);
     for (const l of labs) l.el.style.transition = "none";
