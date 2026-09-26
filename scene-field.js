@@ -643,7 +643,7 @@ vec3 sceneNight(vec2 p, vec2 q, vec2 suv) {
         const s = planeAt(pl, t);
         E.dataRow(10, k, s.x, s.y, s.a, s.h);
         E.dataRow(11, k, 1 + .85 * Math.max(0, s.h), pl.mine ? 1 : 0, s.props, pl.seed);
-        if (t >= pl.park) landed++;
+        if (t >= pl.t0) landed++;   // home = touched down (the counter ticks as each plane lands)
       });
       P.empty.forEach((j, e) => E.dataRow(13, e, PADS[j].x, PADS[j].y, PADS[j].head, lost && j === PICK.y ? 1 : 0));
       field.beats.yourLanding = lost ? null : P.list[KY].t0;

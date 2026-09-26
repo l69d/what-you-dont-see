@@ -21,6 +21,12 @@ URL options:
 - `?at=reveal` starts a chapter straight after Begin.
 - `?hq` renders at the screen's full pixel density.
 
+## At the booth
+
+- **Warm the shader cache.** Open the film once before visitors arrive and wait for Begin. The first load compiles 25 shader programs (up to half a minute on a busy laptop). Chrome caches them, so later loads take about a second.
+- **Check the laptop.** `perf.html` reports the compile time and the GPU time per frame for every medium and scene. Frames over about 16 ms fall below 60 fps; the film then lowers its render scale by itself.
+- **Leave it unattended.** Left waiting for input for 75 s, the film returns to the title for the next visitor.
+
 ## The numbers
 
 The story's data is a simulation, in `model.js`. There are 300 sorties:

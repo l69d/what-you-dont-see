@@ -50,7 +50,7 @@ function main() {
 
   // ---------- layout: a 2.39:1 frame between black bars ----------
   const BASE = Q.has("hq") ? Math.min(2, devicePixelRatio || 1) : 1;
-  let FW = 0, FH = 0, scale = +(Q.get("scale") || BASE);
+  let FW = 0, FH = 0, scale = +(Q.get("scale") || BASE), cap = 1;   // cap: the heaviest reels start a little softer
   function layout() {
     const vw = innerWidth, vh = innerHeight, minBar = vh < 560 ? 64 : 100;
     let fw = vw, fh = vw >= vh ? Math.round(vw / 2.39) : Math.round(vw / 1.15);
@@ -58,7 +58,7 @@ function main() {
     FW = fw; FH = fh;
     const r = document.documentElement.style;
     r.setProperty("--fw", fw + "px"); r.setProperty("--fh", fh + "px");
-    E.resize(fw * scale, fh * scale);
+    E.resize(fw * Math.min(scale, cap), fh * Math.min(scale, cap));
   }
   addEventListener("resize", layout);
   layout();
@@ -174,6 +174,7 @@ function main() {
     if (R.subs) subs = R.subs.map(([a, b, text]) => ({ a, b, text }));
     if (R.cues) for (const [t, fn] of R.cues) cue(t, fn);
     if (R.enter) R.enter();
+    if ((R.cap || 1) !== cap) { cap = R.cap || 1; layout(); }
   }
   const next = () => go(ORDER[ORDER.indexOf(film.id) + 1] || "title");
   // the last seconds of a reel can dissolve into the first frame of the next (burn, ink)
@@ -340,6 +341,7 @@ function main() {
   const FIELD_BEATS = { firstLanding: 2, yourLanding: 9, lastLanding: 14, pushIn: 15, end: 20 };
   REELS.home = {
     chapter: "II. Home",
+    cap: .85,
     outro: 1.6, outroTrans: 1,
     words: [[.8, 3.6, "England, that afternoon."], [4.2, 6.8, "They come home"], [6.8, 9.4, "one by one."], [12.6, 15.2, "Some don’t."],
       [18.2, 21.4, "250 of 300 came home.", "mid"]],
@@ -518,6 +520,7 @@ function main() {
   // ---------- reel: the ghosts rise (scene 3) ----------
   REELS.ghosts = {
     chapter: "VI. The missing",
+    cap: .8,
     words: [[3.8, 7, "Fifty planes never came home."], [8.4, 11.4, "Nobody could count their holes."], [12, 15.2, "Wald imagined them."]],
     dur: 16,
     enter() {
@@ -571,7 +574,7 @@ function main() {
       L.split = GX * e;
       // up to watch the ghosts, then down to the two drawings
       const up = ez(seg(t, .5, 3.4)), back = ez(seg(t, 11, 13.5));
-      L.cam = [lerp(.45 * up, 0, back), lerp(.62 * up, -.1, back), lerp(lerp(1.9, 2.95, e), 2.55, back), 0];
+      L.cam = [lerp(.45 * up, 0, back), lerp(.62 * up, .05, back), lerp(lerp(1.9, 2.95, e), 2.55, back), 0];
       L.holes.ret = RET; L.holes.lost = LOST; L.holes.fall = t - 4; L.holes.gain = .12;
       L.holes.your = YOUR.id;
       L.fx = [1, 5, -1, 0];
