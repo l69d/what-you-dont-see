@@ -29,10 +29,10 @@ The whole film runs about 4 minutes. Skipping II (Home) and VII (the echo) bring
 > "Your plane didn't come home. Remember that: its holes will never be counted."
 
 **The count:**
-> "Every hole on every plane that came home. Engines: two holes for every ten planes. Wings and tail: two per plane."
+> "Every hole on every plane that came home. 90% of them were hit in the wings and tail. Only 19% in the engines."
 
 **The reveal**, as the ghosts' holes fall into the engines:
-> "Same parts, same number of holes, except one. The planes hit in the engines didn't come home. The holes you can see are where a plane can take a hit and still fly home."
+> "Every part was hit about as often on both groups of planes, except one: the engines, 19% against 82%. The planes hit in the engines didn't come home. The holes you can see are where a plane can take a hit and still fly home."
 
 **Close**, on the credits:
 > "Every story you hear comes from someone who came home. This film was written with Claude. A small team of Claude agents painted the art media, the sky, the airfield and the score in parallel against one engine, and every frame you saw was computed live."

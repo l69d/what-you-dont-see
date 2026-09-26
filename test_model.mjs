@@ -26,6 +26,16 @@ for (const z of [wings, fus]) {
 }
 assert.ok(wings.back > fus.back && fus.back > eng.back, "the most holes are on the wings and tail");
 
+// the headline on screen: the share of planes hit in each part
+const pct = v => Math.round(v * 100);
+const [engS, wingsS, fusS] = M.shareHit(S);
+assert.deepEqual([pct(engS.back), pct(engS.lost)], [19, 82], "engines: 19% of the planes that came home, 82% of the lost");
+assert.deepEqual([pct(wingsS.back), pct(wingsS.lost)], [90, 80], "wings and tail");
+assert.deepEqual([pct(fusS.back), pct(fusS.lost)], [54, 52], "fuselage");
+assert.ok(engS.lost > 4 * engS.back, "the engine gap, in planes");
+for (const z of [wingsS, fusS]) assert.ok(Math.abs(z.lost - z.back) < .15, `${z.zone}: about the same either way`);
+assert.ok(wingsS.back > fusS.back && fusS.back > engS.back, "on the survivors, the wings and tail look like the place to armour");
+
 // a lost plane always has a fatal hit; a plane that came home never does
 for (const s of S.sorties) assert.equal(s.lost, s.fatal >= 0);
 // ghosts are numbered 0..49 in sortie order

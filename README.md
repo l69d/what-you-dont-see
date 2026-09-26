@@ -34,17 +34,22 @@ The story's data is a simulation, in `model.js`. There are 300 sorties:
 - A hit in an engine brings the plane down 42% of the time. A hit anywhere else does so 1% of the time.
 - With seed 168, 250 planes come home and 50 are lost, the one in six of 1943's worst raids.
 
-| holes per plane | came home (250) | never came back (50) |
+The film's headline number is the share of planes with at least one hole in each part:
+
+| share of planes hit | came home (250) | never came back (50) |
 |---|---|---|
-| engines | 0.2 | 1.0 |
-| wings and tail | 2.1 | 2.0 |
-| fuselage | 0.7 | 0.7 |
+| engines | 19% | 82% |
+| wings and tail | 90% | 80% |
+| fuselage | 54% | 52% |
+
+(As holes per plane: engines 0.2 against 1.0, wings and tail 2.1 against 2.0, fuselage 0.7 against 0.7.)
 
 The engines are the only part where the two groups differ. The planes hit there are missing from the count, so the survivors' engines look safe.
 
-The heat maps are honest densities:
-- Every hole is splatted with the same kernel.
-- In the split view each side is divided by its own number of planes (250 and 50), so the two are compared per plane.
+The heat maps are honest:
+- While the holes land, the heat is their density. Every hole is splatted with the same kernel.
+- In the split view, each side is divided by its own number of planes (250 and 50), so the two are compared per plane.
+- Then the pattern resolves: each part is filled by its share of planes hit, the number on screen.
 - `test_model.mjs` checks every number above.
 - `test_film.py` runs it and checks that the pages load nothing from the network.
 

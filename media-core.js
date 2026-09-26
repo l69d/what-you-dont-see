@@ -26,8 +26,20 @@ vec3 m_thermal(vec2 p, float d, vec2 n, Hole h) {
   } else {
     // the plane: skin a little warmer than the sky, then the holes' heat
     float heat = uFX.x * (h.dens + uFX.y * h.densLost);
-    T = mix(.07 + .05 * exp(-max(d, 0.) * 30.), .17 + .06 * exp(d * 40.) + heat, inside);
-    if (h.on) T += inside * .25 * sat(1. - h.r);
+    float Tin = .17 + .06 * exp(d * 40.) + heat;
+    // the pattern, resolved: each part filled by the share of planes hit there
+    // (uP[0] came home, uP[1] lost: engines, wings and tail, fuselage), blended in by uP[2].x / uP[2].y
+    bool lostSide = gSide > .5;
+    float zm = lostSide ? uP[2].y : uP[2].x;
+    if (zm > 0. && gZone >= 0) {
+      vec4 v = lostSide ? uP[1] : uP[0];
+      float share = gZone == 0 ? v.x : gZone == 1 ? v.y : v.z;
+      float Tz = .12 + .8 * share + .03 * (fbm(gLocal * 5. + uTime * .08) - .5);
+      Tin = mix(Tin, Tz, zm);
+    }
+    if (h.on) Tin += (.25 + .15 * zm) * sat(1. - h.r);
+    T = mix(.07 + .05 * exp(-max(d, 0.) * 30.), Tin, inside);
+    if (zm > 0. && gZone >= 0) T -= .22 * zm * inside * (1. - smoothstep(0., 2.5 * gPix, abs(zoneD(gLocal, gZone)) * uPlane.z));   // seams between the parts
   }
   T += .012 * (hash21(floor(p / gPix / 2.) + floor(uTime * 12.)) - .5);           // sensor noise
   vec3 col = ironbow(T);

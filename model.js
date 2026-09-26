@@ -105,6 +105,12 @@
     lost: S.holes.filter(h => h.lost && h.z === z).length / S.lost,
   }));
 
+  // the share of planes with at least one hole in each part: the film's headline numbers
+  M.shareHit = S => M.ZONES.map((zone, z) => {
+    const hit = s => s.hits.some(h => h.z === z), back = S.sorties.filter(s => !s.lost), lost = S.sorties.filter(s => s.lost);
+    return { zone, back: back.filter(hit).length / back.length, lost: lost.filter(hit).length / lost.length };
+  });
+
   // the viewer's own plane: one of the 300, so the chance it's lost is the data's own 1 in 6
   M.pickSortie = (S, rand, fate) => {
     const pool = fate === "lost" ? S.sorties.filter(s => s.lost) : fate === "home" ? S.sorties.filter(s => !s.lost) : S.sorties;
