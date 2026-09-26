@@ -1,4 +1,4 @@
-# Talk: What We Don’t See (3 to 4 minutes)
+# Talk: What You Don’t See (3 to 4 minutes)
 
 Before the judges arrive, open `index.html?talk&fate=lost` fullscreen with sound, and wait for Begin. That warms the shader cache.
 
