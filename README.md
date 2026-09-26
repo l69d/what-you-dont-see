@@ -1,6 +1,8 @@
 # What You Don’t See
 
-A short interactive film, about four minutes long, about the bullet holes nobody counted.
+A short interactive film, about four minutes long, about the bullet holes nobody counted. Made for the **Claude Opus Build Day**.
+
+**Play it:** https://l69d.github.io/what-you-dont-see/ (best with sound, on a laptop or larger screen)
 
 You ride in a B-17 over Germany in 1943, and it may not come home. You count the holes in the planes that did. You decide where the armour goes. Then Abraham Wald asks his question, and the planes that never came back rise over their empty hardstands to answer it.
 
@@ -65,3 +67,9 @@ The viewer's own plane is one of the 300 sorties, drawn at random. It is lost wi
 ## How it's made
 
 See `ENGINE.md`. The film was written with Claude. Claude also directed a team of parallel agents that painted the art media (`media-a.js`, `media-b.js`), the raid (`scene-sky.js`), the airfield by day and night (`scene-field.js`) and the score (`audio.js`) against one shared engine and contract. `lab.html` renders any scene, medium or moment as a still, for checking the art.
+
+## Contributors
+
+- [l69d](https://github.com/l69d)
+- [vikas kumawat](https://github.com/vikaskumawat)
+- Claude (Anthropic), with a team of Claude agents

@@ -72,9 +72,13 @@ and scene-specific clocks, which are described in each scene file.
 
 ## Checking your work
 
-```sh
-bash $JOB/tmp/dom.sh  "file://$PWD/holes/lab.html?medium=thermal"          # prints compile errors, if any
-bash $JOB/tmp/shot.sh "file://$PWD/holes/lab.html?sheet=plane&ret=all&gain=.12" out.png 1280 1100
+Open `lab.html` from disk with URL parameters. It shows any shader compile error on the page, so a headless browser's screenshot or DOM dump works as a test. For example:
+
+```
+lab.html?medium=thermal                          one medium on the plane
+lab.html?sheet=plane&ret=all&gain=.12            every medium on the plane, with all the holes, as a contact sheet
+index.html?still=reveal@20&fate=lost&choice=1    one frame of the film at any moment (also strip=open@2,raid@20,...)
+perf.html                                        compile time and GPU time per frame on this machine
 ```
 
 Useful lab parameters: `medium=<name|id>`, `sheet=plane|arc` (all media), `shape=0..1`, `cam=x,y,zoom,rot`, `ret=<n|all>`,
