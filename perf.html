@@ -9,7 +9,8 @@
 <script src="scene-sky.js"></script>
 <script src="scene-field.js"></script>
 <script>
-// compileAll wall time, then GPU time per frame (readPixels forces the GPU to finish) at 1440x602
+// Speed check for a booth laptop: shader compile time, then GPU time per frame for every medium and scene at 1440x602.
+// Anything much over 16 ms will drop below 60 fps; the film lowers its render scale automatically.
 const H = window.HOLES, M = H.model, out = [], px = new Uint8Array(4);
 const W = 1440, Hh = 602;
 (async () => {
@@ -23,9 +24,11 @@ const W = 1440, Hh = 602;
     out.push(`compileAll ${(performance.now() - t0).toFixed(0)} ms for ${Object.keys(E.sources).length} programs, parallel ${!!E.gl.getExtension('KHR_parallel_shader_compile')}${err ? '\nERRORS\n' + err : ''}`);
     const gl = E.gl, sync = () => gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
     const time = (name, set) => {
-      let L = H.layer(); set(L, 0); E.render(L, null, H.post(), 2); sync();
-      const n = 6, t = performance.now();
-      for (let i = 0; i < n; i++) { L = H.layer(); set(L, i); E.render(L, null, H.post(), 2 + i / 30); sync(); }
+      let L = H.layer(); set(L, 0); E.render(L, null, H.post(), 2); sync(); E.render(L, null, H.post(), 2); sync();
+      // twenty frames queued back to back, one sync at the end: the GPU's real throughput
+      const n = 20, t = performance.now();
+      for (let i = 0; i < n; i++) { L = H.layer(); set(L, i); E.render(L, null, H.post(), 2 + i / 30); }
+      sync();
       out.push(`${name.padEnd(26)} ${((performance.now() - t) / n).toFixed(1)} ms`);
     };
     const your = S.sorties.find(s => s.lost && s.hits.length > 2);

@@ -26,6 +26,9 @@ function main() {
   const ZONE_BUTTONS = [[1, "Wings and tail"], [2, "Fuselage"], [0, "Engines"]];
   const MID = (name, fb = 1) => { const m = H.mediaDefs.find(m => m.name === name); return m ? m.id : fb; };
   const INK = id => (H.mediaDefs.find(m => m.id === id) || {}).ink || "light";
+  // a few media are painted dark (a hangar at night, old stone, wood); lift them for bright rooms
+  const LIFT = { metal: 1.3, stone: 1.22, treerings: 1.2, sun: 1.1 };
+  const lift = (L, P) => { if (L.scene !== 0) return; const m = H.mediaDefs.find(m => m.id === L.medium); if (m && LIFT[m.name]) P.exposure *= LIFT[m.name]; };
   const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
 
   // when lost holes land on the drawing (mirrors the hole vertex shader)
@@ -699,6 +702,7 @@ function main() {
     const L = H.layer(), P = H.post();
     if (REDUCED) P.weave = 0;
     const B = R.layers(film.t, L, P, dt) || outro(R, film.t, P);
+    lift(L, P);
     // a little parallax with the pointer, so the frame feels like a lens you can lean into
     if (!REDUCED) {
       par[0] += (ptr[0] - par[0]) * Math.min(1, dt * 2.5); par[1] += (ptr[1] - par[1]) * Math.min(1, dt * 2.5);
@@ -712,7 +716,10 @@ function main() {
     drawLabels(L, film.t);
     if (film.t >= dur(R)) next();
     // an unattended booth returns to the title
-    if (!TALK && film.id !== "title" && R.waiting && R.waiting(film.t) && film.clock - film.lastInput > 75) go("title");
+    // (measured from when the film started waiting, not from the last click)
+    const waiting = !!(R.waiting && R.waiting(film.t));
+    if (!waiting) film.waitStart = 0; else if (!film.waitStart) film.waitStart = film.clock;
+    if (!TALK && film.id !== "title" && waiting && film.clock - Math.max(film.waitStart, film.lastInput) > 75) go("title");
     // keep the frame rate: lower the render scale when frames run long
     ftAvg = ftAvg * .94 + dtms * .06;
     if (film.clock - lastAdjust > 2.5 && film.clock > 4) {
@@ -723,6 +730,7 @@ function main() {
   }
 
   // ---------- start ----------
+  if (Q.has("debug")) window.__film = { get id() { return film.id; }, get t() { return film.t; }, get fps() { return Math.round(1000 / ftAvg); }, get scale() { return scale; } };
   const STRIP = Q.get("strip");   // "open@2,raid@20,..." renders many moments into one contact sheet (pictures only)
   if (STRIP) {
     YOUR = M.pickSortie(S, M.rng(+(Q.get("seed") || 3)), FATE);
@@ -762,6 +770,7 @@ function main() {
     for (const c of film.cues) if (c.t <= film.t) { c.done = true; if (/labels|rollCredits/.test(String(c.fn))) c.fn(); }
     const L = H.layer(), P = H.post();
     const B = film.R.layers(film.t, L, P, 0) || outro(film.R, film.t, P);
+    lift(L, P);
     film.L = L;
     if (film.R.tick) film.R.tick(film.t, 0, L);
     for (const l of labs) l.el.style.transition = "none";
