@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Lab</title>
+<style>
+  html, body { margin: 0; background: #000; color: #ddd; font: 13px/1.4 Georgia, serif; }
+  canvas { display: block; }
+  #err { position: fixed; inset: 0; margin: 0; padding: 12px; color: #ff8a7a; background: rgba(0,0,0,.85); white-space: pre-wrap; font: 12px/1.35 Menlo, monospace; }
+  #err:empty { display: none; }
+  #sheet { display: block; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<pre id="err"></pre>
+<script src="model.js"></script>
+<script src="glsl-common.js"></script>
+<script src="engine.js"></script>
+<script src="media-core.js"></script>
+<script src="media-a.js"></script>
+<script src="media-b.js"></script>
+<script src="scene-sky.js"></script>
+<script src="scene-field.js"></script>
+<script>
+// Still-frame bench. Examples:
+//   lab.html?medium=thermal&ret=all           the plane in one medium with every hole from the planes that came home
+//   lab.html?sheet=plane&ret=all              every registered medium on the plane, as a contact sheet
+//   lab.html?sheet=arc                        every medium on the great arc
+//   lab.html?scene=1&t=12                     a registered scene at t = 12 s (its update() fills the data rows)
+//   lab.html?medium=blueprint&split=1.15&ret=150&lost=all&cam=0,0,2.1,0
+const Q = new URLSearchParams(location.search), H = window.HOLES, M = H.model;
+const num = (k, d) => Q.has(k) ? +Q.get(k) : d, vec = (k, d) => Q.has(k) ? Q.get(k).split(",").map(Number) : d;
+const err = document.getElementById("err");
+const S = M.simulate();
+const mediaId = v => { if (v == null) return 0; if (/^\d+$/.test(v)) return +v; const m = H.mediaDefs.find(m => m.name === v); return m ? m.id : 0; };
+function layerFromQuery() {
+  const L = H.layer();
+  L.scene = num("scene", 0); L.medium = mediaId(Q.get("medium"));
+  L.shape = num("shape", Q.get("sheet") === "arc" ? 0 : 1);
+  L.arc = vec("arc", L.arc); L.cam = vec("cam", L.shape > .5 ? [0, 0, 1.75, 0] : [0, 0, 1, 0]);
+  L.plane = vec("plane", L.plane); L.split = num("split", 0);
+  L.fx = vec("fx", L.fx); L.fx2 = vec("fx2", L.fx2);
+  for (let i = 0; i < 8; i++) if (Q.has("p" + i)) L.P.set(vec("p" + i), i * 4);
+  const count = (k, all) => Q.get(k) === "all" ? all : num(k, 0);
+  const your = Q.get("your");
+  L.holes = { ret: count("ret", S.retHoles), lost: count("lost", S.lostHoles), fresh: num("fresh", 0), fall: num("fall", -1), gain: num("gain", 1),
+    your: your === "home" ? S.sorties.find(s => !s.lost).id : your === "lost" ? S.sorties.find(s => s.lost).id : num("your", -1) };
+  return L;
+}
+function postFromQuery() {
+  const P = H.post();
+  for (const k of ["exposure", "bloom", "grain", "vignette", "aberr", "defocus", "flash", "fade", "invert", "mix", "trans", "weave", "halation"]) if (Q.has(k)) P[k] = num(k);
+  if (Q.has("blur")) P.blur = vec("blur");
+  return P;
+}
+try {
+  const W = num("w", 1280), Hh = num("h", 536), t = num("t", 3);
+  const cv = document.getElementById("c"), E = new H.Engine(cv, { still: true });
+  E.resize(W, Hh);
+  if (!E.build(M)) throw new Error(E.errors);
+  E.setHoles(S.holes);
+  if (Q.has("ghosts")) S.sorties.filter(s => s.lost).forEach((s, i) => E.dataRow(8, i, (i % 10 - 4.5) * .34, 1.25 + Math.floor(i / 10) * .22, 0, .14));
+  const ctx = { model: M, sim: S, lab: true };
+  const run = L => { const sc = Object.values(H.scenes).find(s => s.id === L.scene); if (sc && sc.update) sc.update(t, L, E, ctx); };
+  if (Q.get("sheet")) {
+    // contact sheet: every medium, 3 columns
+    const only = Q.get("ids") ? Q.get("ids").split(",").map(Number) : null;   // e.g. ids=10,11,12
+    const defs = H.mediaDefs.slice().sort((a, b) => a.id - b.id).filter(m => !only || only.includes(m.id)), cols = 3, cw = W / cols, ch = cw * Hh / W;
+    const sheet = document.createElement("canvas"); sheet.id = "sheet";
+    sheet.width = W; sheet.height = Math.ceil(defs.length / cols) * ch;
+    const g = sheet.getContext("2d"); g.font = "15px Georgia"; g.textBaseline = "top";
+    defs.forEach((m, i) => {
+      const L = layerFromQuery(); L.medium = m.id;
+      E.render(L, null, postFromQuery(), t);
+      const x = (i % cols) * cw, y = Math.floor(i / cols) * ch;
+      g.drawImage(cv, x, y, cw, ch);
+      g.fillStyle = "rgba(0,0,0,.6)"; g.fillRect(x, y, g.measureText(m.id + " " + m.name).width + 12, 22);
+      g.fillStyle = "#fff"; g.fillText(m.id + " " + m.name, x + 6, y + 4);
+    });
+    cv.replaceWith(sheet);
+  } else if (Q.has("anim")) {
+    const t0 = performance.now();
+    const loop = now => { const L = layerFromQuery(), tt = t + (now - t0) / 1000; if (L.holes.fall >= 0) L.holes.fall += (now - t0) / 1000; const sc = Object.values(H.scenes).find(s => s.id === L.scene); if (sc && sc.update) sc.update(tt, L, E, ctx); E.render(L, null, postFromQuery(), tt); requestAnimationFrame(loop); };
+    requestAnimationFrame(loop);
+  } else {
+    const L = layerFromQuery(); run(L);
+    E.render(L, null, postFromQuery(), t);
+  }
+  if (E.errors) throw new Error(E.errors);   // programs compile when first drawn
+  document.title = "ok";
+} catch (e) {
+  err.textContent = String(e.message || e);
+  document.title = "error";
+}
+</script>
+</body>
+</html>

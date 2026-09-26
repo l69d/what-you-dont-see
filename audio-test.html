@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Audio test</title>
+<style>
+  html, body { margin: 0; background: #0c0c0d; color: #d8d8d8; font: 12px/1.45 Menlo, Consolas, monospace; }
+  body { padding: 16px; }
+  #err { margin: 0 0 14px; white-space: pre; overflow-x: auto; }
+  #play button { font: inherit; margin: 0 6px 6px 0; background: #1d1d20; color: #ddd; border: 1px solid #3a3a40; border-radius: 3px; padding: 2px 8px; cursor: pointer; }
+</style>
+</head>
+<body>
+<pre id="err">rendering...</pre>
+<div id="play"></div>
+<script src="audio.js"></script>
+<script>
+// Renders every mood, layer and one-shot of audio.js through an OfflineAudioContext (the same _build the film uses)
+// and measures it. The report goes into <pre id="err">, and line by line to the console as "AT| ..." for a headless runner.
+// Pass: no NaN, peak below -1 dBFS, nothing silent that should sound (and "silence" silent over its last quarter).
+// Beds (and layers at level 1) should sit at -30..-20 dBFS RMS over their second half; one-shots should peak at
+// -12..-3 dBFS (their RMS is the loudest 300 ms). audio-test.html?only=bell|clink renders a subset.
+// ">80Hz" is how much of that RMS survives an 80 Hz highpass (0 dB: all of it), a proxy for laptop speakers.
+(async () => {
+  const A = HOLES.audio, SR = 48000, out = [];
+  const say = s => { out.push(s); console.log("AT| " + s); };
+  const dB = x => x > 0 ? 20 * Math.log10(x) : -Infinity;
+  const num = x => (x === -Infinity ? "-inf" : x.toFixed(1)).padStart(9);
+
+  // 1. the live context, muted so a headless run makes no noise
+  let live;
+  try {
+    A.setMute(true);
+    const p = A.init(), sync = A.ready, same = A.init() === p;
+    await p;
+    A.mood("title", 1); A.engines(.5, .2); A.wind(.3); A.tension(.2); A.fire(.1);
+    A.flak(.2, .6); A.hit(-.3); A.fighter(.5); A.boom(); A.stamp(3); A.tick(); A.clink(); A.bell(2);
+    A.whoosh(); A.riser(1); A.heartbeat(); A.claim(); A.motif(1);
+    await new Promise(r => setTimeout(r, 400));
+    const c = A.ctx;
+    live = `init(): ready at once ${sync}, idempotent ${same}, state ${c.state}, ${c.sampleRate} Hz, clock moving ${c.currentTime > 0}, muted ${A.muted}, every call ran`;
+    A.mood("silence", .1);
+  } catch (e) { live = "init() FAILED: " + e; }
+
+  // 2. offline renders
+  const moods = ["title", "dawn", "raid", "home", "hangar", "decision", "wald", "reveal", "echo", "credits"];
+  const C = (name, kind, dur, run) => ({ name, kind, dur, run });
+  const rand = () => Math.random() * 2 - 1;
+  const cases = [
+    ...moods.map(m => C("mood " + m, "bed", 6, S => S.mood(m, .5))),
+    C("mood title, then reveal (3 s fade)", "bed", 8, (S, at) => { S.mood("title", .5); at(2, () => S.mood("reveal", 3)); }),
+    C("mood title 20 s, roots trade at 8, 16", "bed", 20, S => S.mood("title", .5)),
+    C("mood title + layers, then silence", "quiet", 6, (S, at) => { S.mood("title", .3); S.engines(.8); S.wind(.5); at(1, () => S.mood("silence", .6)); }),
+    C("engines 1", "bed", 6, S => S.engines(1)),
+    C("engines .35, pan -.6", "bed", 6, S => S.engines(.35, -.6)),
+    C("wind 1", "bed", 6, S => S.wind(1)),
+    C("tension 1", "bed", 6, S => S.tension(1)),
+    C("fire 1", "bed", 6, S => S.fire(1)),
+    C("flak far", "shot", 3.5, S => S.flak(-.4, 0)),
+    C("flak mid", "shot", 3.5, S => S.flak(.2, .5)),
+    C("flak near", "shot", 3.5, S => S.flak(.5, 1)),
+    C("hit", "shot", 1.5, S => S.hit(.3)),
+    C("fighter", "shot", 3.5, S => S.fighter(.6)),
+    C("boom", "shot", 6, S => S.boom()),
+    C("stamp", "shot", .6, S => S.stamp(0)),
+    C("stamp run, accelerating to 40/s", "shot", 5.5, (S, at) => {
+      for (let t = .05, i = 0; t < 5; i++) { const k = i; at(t, () => S.stamp(k)); t += 1 / (3 * Math.pow(40 / 3, Math.min(1, t / 4))); }
+    }),
+    C("tick", "shot", .5, S => S.tick()),
+    C("clink", "shot", 9, S => S.clink()),
+    C("bell", "shot", 14.5, S => S.bell()),
+    C("bell -5", "shot", 14.5, S => S.bell(-5)),
+    C("whoosh", "shot", 2, S => S.whoosh()),
+    C("riser 3 s", "shot", 3.6, S => S.riser(3)),
+    C("heartbeat", "shot", 1.2, S => S.heartbeat()),
+    C("claim", "shot", 5, S => S.claim()),
+    C("motif 0 1 2 3", "shot", 9, (S, at) => [0, 1, 2, 3].forEach(i => at(.05 + i * .8, () => S.motif(i)))),
+    C("motif 0", "shot", 6.5, S => S.motif(0)),
+    { ...C("motif 0 at t = 0", "shot", 6.5, S => S.motif(0)), at0: true },
+    C("stress: raid, all layers, barrage", "mix", 9, (S, at) => {
+      S.mood("raid", .3); S.engines(1, .3); S.wind(1); S.tension(1); S.fire(1);
+      for (let k = 0; k < 400; k++) { S.hit(rand()); S.flak(rand(), 1); S.stamp(k); S.boom(); }   // spam: the limits must hold
+      for (let t = .1; t < 8.5; t += .04) at(t, () => { S.flak(rand(), Math.random()); S.hit(rand()); });
+      [.5, 2.5, 4.5].forEach(t => at(t, () => S.fighter(rand())));
+      [3, 6].forEach(t => at(t, () => { S.boom(); S.riser(1); S.claim(); S.clink(); }));
+    }),
+  ];
+
+  const only = new URLSearchParams(location.search).get("only");   // e.g. audio-test.html?only=bell|clink
+  if (only) cases.splice(0, cases.length, ...cases.filter(c => new RegExp(only, "i").test(c.name)));
+
+  // One-shots fire after a 1 s pre-roll, so they are measured as they sound mid-film ("at t = 0" rows skip it,
+  // to check that the compressor, which Chrome starts closed, is already open at the first sound).
+  async function render(c) {
+    const pre = (c.kind === "shot" || c.kind === "mix") && !c.at0 ? 1 : 0;
+    const ctx = new OfflineAudioContext(2, Math.ceil((pre + c.dur) * SR), SR), errs = [];
+    const S = A._build(ctx, ctx.destination), q = new Map();
+    const at = (time, fn) => {                       // suspend() works on render-quantum boundaries
+      const f = Math.max(1, Math.round(time * SR / 128)) * 128 / SR;
+      if (!q.has(f)) {
+        q.set(f, []);
+        ctx.suspend(f).then(() => { try { q.get(f).forEach(g => g()); } catch (e) { errs.push(e); } ctx.resume(); });
+      }
+      q.get(f).push(fn);
+    };
+    const run = () => c.run(S, pre ? (time, fn) => at(pre + time, fn) : at);
+    if (pre) at(pre, run); else try { run(); } catch (e) { errs.push(e); }
+    const buf = await ctx.startRendering();
+    await new Promise(r => setTimeout(r, 150));      // let the last 'ended' events land
+    return { c, buf, left: S._active(), errs };
+  }
+  function highpass(d) {                             // 2nd-order Butterworth at 80 Hz
+    const w = 2 * Math.PI * 80 / SR, cw = Math.cos(w), al = Math.sin(w) * Math.SQRT1_2, a0 = 1 + al;
+    const b0 = (1 + cw) / 2 / a0, b1 = -(1 + cw) / a0, a1 = -2 * cw / a0, a2 = (1 - al) / a0, y = new Float32Array(d.length);
+    let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+    for (let i = 0; i < d.length; i++) {
+      const x = d[i] === d[i] ? d[i] : 0, v = b0 * x + b1 * x1 + b0 * x2 - a1 * y1 - a2 * y2;
+      x2 = x1; x1 = x; y2 = y1; y1 = v; y[i] = v;
+    }
+    return y;
+  }
+  const B = SR / 100;                                // 10 ms blocks
+  function blocks(chs) {
+    const e = new Float64Array(Math.ceil(chs[0].length / B));
+    for (const d of chs) for (let i = 0; i < d.length; i++) if (d[i] === d[i]) e[(i / B) | 0] += d[i] * d[i];
+    return e;
+  }
+  function measure({ c, buf, left, errs }) {
+    const chs = [buf.getChannelData(0), buf.getChannelData(1)], tail = chs[0].length * (c.kind === "quiet" ? .75 : .5) | 0;
+    let peak = 0, peak2 = 0, nan = false;
+    for (const d of chs) for (let i = 0; i < d.length; i++) {
+      const x = Math.abs(d[i]);
+      if (x !== x) nan = true; else { if (x > peak) peak = x; if (i >= tail && x > peak2) peak2 = x; }
+    }
+    const e = blocks(chs), eh = blocks(chs.map(highpass)), nb = e.length;
+    let from = nb >> 1, len = nb - from;
+    if (c.kind === "shot") {                         // the loudest 300 ms
+      len = Math.min(30, nb); let best = -1;
+      for (let i = 0; i + len <= nb; i++) { let s = 0; for (let j = i; j < i + len; j++) s += e[j]; if (s > best) { best = s; from = i; } }
+    }
+    const sum = a => { let s = 0; for (let i = from; i < from + len; i++) s += a[i]; return s; };
+    const rms = Math.sqrt(sum(e) / (len * B * 2)), hi = dB(Math.sqrt(sum(eh) / (len * B * 2))) - dB(rms);
+    const P = dB(peak), R = dB(rms), silent = (c.kind === "quiet" ? peak2 : peak) < 1e-3;
+    const bad = [], warn = [];
+    if (errs.length) bad.push("threw: " + errs[0]);
+    if (nan) bad.push("NaN");
+    if (P >= -1) bad.push("clips");
+    if (c.kind === "quiet" ? !silent : silent) bad.push(c.kind === "quiet" ? "not silent" : "silent");
+    if (c.kind === "bed" && (R < -30 || R > -20)) warn.push("RMS off target");
+    if (c.kind === "shot" && (P < -12 || P > -3)) warn.push("peak off target");
+    if (c.kind !== "mix" && left) warn.push(left + " voices never ended");
+    const status = bad.length ? "FAIL " + bad.join(", ") : warn.length ? "warn " + warn.join(", ") : c.kind === "mix" ? `ok (${left} voices still sounding)` : "ok";
+    return { line: c.name.padEnd(36) + num(P) + num(R) + num(hi) + (nan ? "  yes" : "   no") + (silent ? "     yes" : "      no") + "  " + status, bad: bad.length, warn: warn.length };
+  }
+
+  const t0 = performance.now();
+  const results = await Promise.all(cases.map(render));
+  const rows = results.map(measure), fails = rows.filter(r => r.bad).length, warns = rows.filter(r => r.warn).length;
+  say(live);
+  say("");
+  say("name".padEnd(36) + "peak dBFS".padStart(9) + " RMS dBFS" + "   >80Hz" + "  NaN" + "  silent" + "  status");
+  rows.forEach(r => say(r.line));
+  say("");
+  say(`${rows.length} renders in ${((performance.now() - t0) / 1000).toFixed(1)} s: ${fails ? fails + " FAILED" : "all pass"}, ${warns} off target`);
+  document.getElementById("err").textContent = out.join("\n");
+  document.title = "Audio test: " + (fails ? "FAIL" : "PASS");
+
+  // audition any render (window.renders is also read by headless tools)
+  window.renders = results;
+  let player, playing;
+  const box = document.getElementById("play");
+  results.forEach(({ c, buf }) => {
+    const b = document.createElement("button");
+    b.textContent = c.name;
+    b.onclick = () => {
+      player = player || new AudioContext();
+      if (playing) playing.stop();
+      playing = player.createBufferSource(); playing.buffer = buf; playing.connect(player.destination); playing.start();
+    };
+    box.appendChild(b);
+  });
+  say("DONE");
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,43 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Perf</title><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"></head><body style="margin:0;background:#000">
+<canvas id="c"></canvas><pre id="err"></pre>
+<script src="model.js"></script>
+<script src="glsl-common.js"></script>
+<script src="engine.js"></script>
+<script src="media-core.js"></script>
+<script src="media-a.js"></script>
+<script src="media-b.js"></script>
+<script src="scene-sky.js"></script>
+<script src="scene-field.js"></script>
+<script>
+// compileAll wall time, then GPU time per frame (readPixels forces the GPU to finish) at 1440x602
+const H = window.HOLES, M = H.model, out = [], px = new Uint8Array(4);
+const W = 1440, Hh = 602;
+(async () => {
+  try {
+    const E = new H.Engine(document.getElementById('c'), {});
+    E.resize(W, Hh);
+    E.build(M);
+    const S = M.simulate(); E.setHoles(S.holes);
+    let t0 = performance.now();
+    const err = await E.compileAll();
+    out.push(`compileAll ${(performance.now() - t0).toFixed(0)} ms for ${Object.keys(E.sources).length} programs, parallel ${!!E.gl.getExtension('KHR_parallel_shader_compile')}${err ? '\nERRORS\n' + err : ''}`);
+    const gl = E.gl, sync = () => gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    const time = (name, set) => {
+      let L = H.layer(); set(L, 0); E.render(L, null, H.post(), 2); sync();
+      const n = 6, t = performance.now();
+      for (let i = 0; i < n; i++) { L = H.layer(); set(L, i); E.render(L, null, H.post(), 2 + i / 30); sync(); }
+      out.push(`${name.padEnd(26)} ${((performance.now() - t) / n).toFixed(1)} ms`);
+    };
+    const your = S.sorties.find(s => s.lost && s.hits.length > 2);
+    time('clear (post only)', L => { L.medium = 0; L.shape = 0; });
+    for (const m of H.mediaDefs.slice().sort((a, b) => a.id - b.id)) {
+      time('arc ' + m.name, L => { L.medium = m.id; L.shape = 0; L.cam = [0, 0, 1, 0]; });
+      time('plane ' + m.name, L => { L.medium = m.id; L.shape = 1; L.cam = [0, .1, 2, 0]; L.holes.ret = S.retHoles; L.holes.gain = .12; });
+    }
+    for (const sc of Object.values(H.scenes)) for (const t of [4, 13, 24]) time(`scene ${sc.id} t=${t}`, (L, i) => { L.scene = sc.id; sc.update(t + i / 30, L, E, { sim: S, your, claimAt: 10 }); });
+    time('reveal split + ghosts', L => { L.medium = 1; L.split = 1.15; L.cam = [0, .3, 2.9, 0]; L.holes.ret = S.retHoles; L.holes.lost = S.lostHoles; L.holes.fall = 6; L.fx = [1, 5, -1, 0]; L.fx2 = [-1, 0, 1, 50]; for (let i = 0; i < 50; i++) { E.dataRow(8, i, 1.15 + (i % 10 - 4.5) * .3, 1.1 + Math.floor(i / 10) * .2, 0, .105); E.dataRow(9, i, 1, 1, 0, 0); } });
+    document.title = 'done';
+  } catch (e) { out.push('ERROR ' + (e.stack || e)); document.title = 'error'; }
+  document.getElementById('err').textContent = out.join('\n');
+})();
+</script></body></html>
