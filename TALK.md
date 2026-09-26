@@ -1,44 +1,38 @@
-# Talk: Where the holes aren’t (about 3 minutes)
+# Talk: Where the holes aren’t (3 to 4 minutes)
 
-Open `index.html?talk&fate=lost` fullscreen with sound. Hand the judges the mouse: they take the seat, hold, and choose.
-← and → jump between chapters if you're short of time. Skipping II (home) and VII (the echo) saves about 50 s.
+Before the judges arrive, open `index.html?talk&fate=lost` fullscreen with sound, and wait for Begin. That warms the shader cache.
 
-## 0:00 Title (10 s)
+- `fate=lost` makes the judge's own plane go down, which is the stronger version.
+- Hand the judges the mouse: they claim the plane, hold to count, and choose the armour.
+- ← and → jump between chapters.
 
+The whole film runs about 4½ minutes. Skipping II (Home) and VII (the echo) brings it to about 3½.
+
+| chapter | length | who does what |
+|---|---|---|
+| Cold open | 24 s | nothing: let the montage play |
+| I. The raid | about 50 s | the judge clicks the gold-outlined plane when "This one is yours" appears |
+| II. Home | 23 s | skippable with → |
+| III. The count | about 28 s | the judge holds the mouse button (or Space) until the count completes |
+| IV. The decision | about 12 s | the judge clicks a part of the plane |
+| V. The question | about 20 s | press Show me (or Enter) |
+| VI. The missing | about 57 s | the ghosts rise, then the reveal |
+| VII. Everywhere | 36 s | skippable with → |
+| Credits | | "This wasn't a video", and the film's own shader code rolls |
+
+## What to say
+
+**Title:**
 > "This is a film you play. Everything you'll see is drawn live by code: no footage, no images. Take the mouse."
 
-Press Begin.
-
-## 0:10 The cold open (20 s)
-
-Let it play. Say nothing; let the montage carry it.
-
-## 0:30 The raid (45 s)
-
-Read nothing; the words are on screen. When "This one is yours" appears, the judge clicks the plane with the gold outline.
-
-With `fate=lost`, their plane is hit in an engine and falls out of formation. If it goes down, say:
-
+**The raid**, once the judge's plane goes down:
 > "Your plane didn't come home. Remember that: its holes will never be counted."
 
-## 1:15 The count (25 s)
+**The count:**
+> "Every hole on every plane that came home. Engines: two holes for every ten planes. Wings and tail: two per plane."
 
-Press → to skip Home, or let it play. The judge holds to count: 250 planes, 748 holes, cut through a dozen art media.
-
-> "Every hole on every plane that came home. Engines: two holes for every ten planes. Wings: two per plane."
-
-## 1:40 The decision (15 s)
-
-The judge clicks where the armour goes. Most choose the wings.
-
-## 1:55 The question and the reveal (55 s)
-
-Press Show me. The ghosts of the 50 lost planes rise from their empty hardstands, and their holes fall into the engines.
-
+**The reveal**, as the ghosts' holes fall into the engines:
 > "Same parts, same number of holes, except one. The planes hit in the engines didn't come home. The holes you can see are where a plane can take a hit and still fly home."
 
-## 2:50 Close (10 s)
-
-Press → to the credits.
-
-> "Every story you hear comes from someone who came home. This one was written with Claude: a small team of Claude agents painted the media, the sky, the airfield and the score in parallel, against one engine."
+**Close**, on the credits:
+> "Every story you hear comes from someone who came home. This film was written with Claude. A small team of Claude agents painted the art media, the sky, the airfield and the score in parallel against one engine, and every frame you saw was computed live."
