@@ -353,7 +353,6 @@ function main() {
   const FIELD_BEATS = { firstLanding: 2, yourLanding: 9, lastLanding: 14, pushIn: 15, end: 20 };
   REELS.home = {
     chapter: "II. Home",
-    cap: .85,
     outro: 1.6, outroTrans: 1,
     words: [[.8, 3.6, "England, that afternoon."], [4.2, 6.8, "They come home"], [6.8, 9.4, "one by one."], [12.6, 15.2, "Some don’t."],
       [18.2, 21.4, "250 of 300 came home.", "mid"]],
@@ -541,7 +540,6 @@ function main() {
   // ---------- reel: the ghosts rise (scene 3) ----------
   REELS.ghosts = {
     chapter: "VI. The missing",
-    cap: .8,
     words: [[3.8, 7, "Fifty planes never came home."], [8.4, 11.4, "Nobody could count their hits."], [12, 15.2, "Wald imagined them."]],
     dur: 16,
     enter() {
@@ -762,8 +760,9 @@ function main() {
     // keep the frame rate: lower the render scale when frames run long
     ftAvg = ftAvg * .94 + dtms * .06;
     if (film.clock - lastAdjust > 2.5 && film.clock > 4) {
-      if (ftAvg > 26 && scale > .5) { scale = Math.max(.5, scale * .84); layout(); lastAdjust = film.clock; ftAvg = 16; }
-      else if (ftAvg < 17.5 && scale < BASE && film.clock - lastAdjust > 8) { scale = Math.min(BASE, scale * 1.1); layout(); lastAdjust = film.clock; ftAvg = 16; }
+      // a film can live at 30 fps, but not blurred: step down only below about 30 fps, never under 3/4, and come back quickly
+      if (ftAvg > 34 && scale > .75) { scale = Math.max(.75, scale * .9); layout(); lastAdjust = film.clock; ftAvg = 16; }
+      else if (ftAvg < 22 && scale < BASE && film.clock - lastAdjust > 4) { scale = Math.min(BASE, scale * 1.12); layout(); lastAdjust = film.clock; ftAvg = 16; }
     }
   }
 

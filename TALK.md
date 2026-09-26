@@ -10,14 +10,14 @@ The whole film runs about 4 minutes. Skipping II (Home) and VII (the echo) bring
 
 | chapter | length | who does what |
 |---|---|---|
-| Cold open | 24 s | nothing: let the montage play |
+| Cold open | 21 s | nothing: let the montage play |
 | I. The raid | about 50 s | the judge clicks the gold-outlined plane when "This one is yours" appears |
-| II. Home | 23 s | skippable with → |
+| II. Home | 21.5 s | skippable with → |
 | III. The count | about 16 s | the judge holds the mouse button (or Space) for 3 s, until the count completes |
 | IV. The decision | about 12 s | the judge clicks a part of the plane |
 | V. The question | about 20 s | press Show me (or Enter) |
 | VI. The missing | about 57 s | the ghosts rise, then the reveal |
-| VII. Everywhere | 36 s | skippable with → |
+| VII. Everywhere | 32.5 s | skippable with → |
 | Credits | | "This wasn't a video", and the film's own shader code rolls |
 
 ## What to say
