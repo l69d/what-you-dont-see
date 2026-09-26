@@ -429,8 +429,6 @@ vec3 m_stainedglass(vec2 p, float d, vec2 n, Hole h) {
   float S = inS ? (arc ? 6.5 : 12.) : (arc ? 4. : 4.8), wsc = inS ? sc : 1.;
   vec2 cw = c * S + .22 * vec2(vnoise(c * 7.), vnoise(c * 7. + 4.3));   // hand-cut: slightly wobbly lines
   vec3 v = voronoi(cw);
-  if (isnan(v.x) || isnan(v.y) || isnan(v.z)) return vec3(1., 0., 1.);
-  if (v.y < -.01) return vec3(0., 1., 0.);
   float k = fract(v.z * 7.31 + (inS ? .5 : 0.));
   vec3 g = inS ? (k < .32 ? vec3(1., .52, .07) : k < .55 ? vec3(.98, .74, .2) : k < .8 ? vec3(.78, .1, .07) : vec3(.96, .34, .06))
                : (k < .42 ? vec3(.06, .15, .6) : k < .68 ? vec3(.03, .08, .34) : k < .84 ? vec3(.03, .38, .2) : vec3(.26, .4, .74));
