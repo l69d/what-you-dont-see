@@ -277,11 +277,11 @@
   if (stems) {
     say("");
     say("stems, integrated LUFS (and bass %) per chapter, each through its own master chain");
-    say("chapter       mix         score        layers       effects");
+    say("chapter       mix  bass     score  bass    layers  bass   effects  bass");
     const S3 = {};
     for (const k of ["score", "layers", "effects"]) { const s = await render(STEMS[k]); S3[k] = analyse(s.buf); }
-    for (const x of rows) say(x.r.id.padEnd(10) + f1(x.I, 7) + f1(x.bass, 4) + "%" + ["score", "layers", "effects"].map(k => {
-      const b0 = blk(x.r.t0), b1 = blk(x.r.t1); return f1(loudness(S3[k], b0, b1).I, 8) + f1(bass(S3[k], b0, b1), 4) + "%";
+    for (const x of rows) say(x.r.id.padEnd(10) + f1(x.I, 7) + f1(x.bass, 6) + "%" + ["score", "layers", "effects"].map(k => {
+      const b0 = blk(x.r.t0), b1 = blk(x.r.t1); return f1(loudness(S3[k], b0, b1).I, 8) + f1(bass(S3[k], b0, b1), 6) + "%";
     }).join(""));
   }
 

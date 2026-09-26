@@ -66,10 +66,11 @@ The viewer's own plane is one of the 300 sorties, drawn at random. It is lost wi
 
 ## How it's made
 
-See `ENGINE.md`. The film was written with Claude. Claude also directed a team of parallel agents that painted the art media (`media-a.js`, `media-b.js`), the raid (`scene-sky.js`), the airfield by day and night (`scene-field.js`) and the score (`audio.js`) against one shared engine and contract. `lab.html` renders any scene, medium or moment as a still, for checking the art.
+See `ENGINE.md`. The film was written with Claude. Claude also directed a team of parallel agents that painted the art media (`media-a.js`, `media-b.js`), the raid (`scene-sky.js`), the airfield by day and night (`scene-field.js`) and the score (`audio.js`) against one shared engine and contract. `lab.html` renders any scene, medium or moment as a still, for checking the art. `audio-test.html` measures every sound on its own, and `audio-mix.html` renders the whole film's mix offline: loudness per chapter, true peak, bass share and clicks. At the end of the film, **Explore the cost** shows the tokens and time the film took, measured from the session transcripts (`making-of.js`), and **The team** shows who made it.
 
 ## Contributors
 
-- [l69d](https://github.com/l69d)
-- [vikas kumawat](https://github.com/vikaskumawat)
+- [Karthik (@l69d)](https://github.com/l69d)
+- [vikas kumawat (@vikaskumawat)](https://github.com/vikaskumawat)
+- [ATHUL VR (@Athullvr)](https://github.com/Athullvr)
 - Claude (Anthropic), with a team of Claude agents

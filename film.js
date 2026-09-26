@@ -169,6 +169,7 @@ function main() {
     const R = REELS[id];
     if (!R) return;
     if (film.R && film.R.exit) film.R.exit();
+    if (H.extras && H.extras.close) H.extras.close();
     film.id = id; film.R = R; film.t = 0; film.cues = []; film.hold = false;
     cues = []; wordsEl.textContent = ""; subs = []; subOverride = null; ui([]); labels([]);
     $("#roll").classList.remove("on");
@@ -678,8 +679,9 @@ function main() {
       `<p>Written, drawn and scored with Claude<small>${lines.toLocaleString()} lines of shader code, one synthesizer, no footage.</small></p>` +
       `<p>The reasoning is Abraham Wald’s<small>Statistical Research Group, 1943. The 300 sorties and their holes are an illustrative simulation.</small></p>`;
     $("#roll").classList.add("on");
+    const extra = H.extras && H.extras.buttons ? H.extras.buttons({ frame: frameEl, touch }) : [];   // Explore the cost, The team
     ui([{ label: "Watch again", cls: "primary", onClick: () => { YOUR = M.pickSortie(S, Math.random, FATE); CHOICE = -1; go("open"); } },
-      { label: "Back to the title", onClick: () => go("title") }]);
+      ...extra, { label: "Back to the title", onClick: () => go("title") }]);
   }
 
   // ---------- input ----------
@@ -693,6 +695,7 @@ function main() {
   addEventListener("blur", () => { film.down = film.spaceDown = false; film.hold = false; });
   addEventListener("keydown", e => {
     touch(); lastKeyboard = true;
+    if (H.extras && H.extras.isOpen && H.extras.isOpen()) return;   // an end panel has the keyboard
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     if (e.key === "m" || e.key === "M") { toggleSound(); return; }
     if (e.key === " ") film.spaceDown = true;
