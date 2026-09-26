@@ -13,7 +13,7 @@ The whole film runs about 4 minutes. Skipping II (Home) and VII (the echo) bring
 | Cold open | 24 s | nothing: let the montage play |
 | I. The raid | about 50 s | the judge clicks the gold-outlined plane when "This one is yours" appears |
 | II. Home | 23 s | skippable with → |
-| III. The count | about 20 s | the judge holds the mouse button (or Space) for about 7 s, until the count completes |
+| III. The count | about 16 s | the judge holds the mouse button (or Space) for 3 s, until the count completes |
 | IV. The decision | about 12 s | the judge clicks a part of the plane |
 | V. The question | about 20 s | press Show me (or Enter) |
 | VI. The missing | about 57 s | the ghosts rise, then the reveal |
@@ -26,13 +26,13 @@ The whole film runs about 4 minutes. Skipping II (Home) and VII (the echo) bring
 > "This is a film you play. Everything you'll see is drawn live by code: no footage, no images. Take the mouse."
 
 **The raid**, once the judge's plane goes down:
-> "Your plane didn't come home. Remember that: its holes will never be counted."
+> "Your plane didn't come home. Remember that: its hits will never be counted."
 
 **The count:**
-> "Every hole on every plane that came home. 90% of them were hit in the wings and tail. Only 19% in the engines."
+> "Every hit on every plane that came home. 90% of them were hit in the wings and tail. Only 19% in the engines."
 
-**The reveal**, as the ghosts' holes fall into the engines:
-> "Every part was hit about as often on both groups of planes, except one: the engines, 19% against 82%. The planes hit in the engines didn't come home. The holes you can see are where a plane can take a hit and still fly home."
+**The reveal**, as the ghosts' hits fall into the engines:
+> "Every part was hit about as often on both groups of planes, except one: the engines, 19% against 82%. The planes hit in the engines didn't come home. The hits you can see are where a plane can take a hit and still fly home."
 
 **Close**, on the credits:
 > "Every story you hear comes from someone who came home. This film was written with Claude. A small team of Claude agents painted the art media, the sky, the airfield and the score in parallel against one engine, and every frame you saw was computed live."

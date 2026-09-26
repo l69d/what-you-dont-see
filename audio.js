@@ -1,4 +1,4 @@
-// What We Don't See: the score and every sound effect, synthesized live with the WebAudio API.
+// What You Don't See: the score and every sound effect, synthesized live with the WebAudio API.
 // No audio files, no libraries. The director calls HOLES.audio.init() inside the Begin click, then mood() for the
 // score, engines() / wind() / tension() / fire() for the continuous layers (call them every frame if you like;
 // they are smoothed and deduplicated), and the one-shots, which rate-limit and voice-limit themselves.

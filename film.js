@@ -361,7 +361,7 @@ function main() {
     enter() {
       const b = Object.assign({}, FIELD_BEATS, (H.scenes.field && H.scenes.field.beats) || {});
       au("mood", "home", 3); au("engines", .45, 0);
-      if (!YOUR.lost && b.yourLanding != null) subs.push({ a: b.yourLanding + .4, b: b.yourLanding + 4, text: `Your plane lands with ${plural(YOUR.hits.length, "hole")} in it.` });
+      if (!YOUR.lost && b.yourLanding != null) subs.push({ a: b.yourLanding + .4, b: b.yourLanding + 4, text: `Your plane lands. It took ${plural(YOUR.hits.length, "hit")}.` });
       subs.push({ a: 15.3, b: 18, text: YOUR.lost ? "One of the empty hardstands is yours." : "The ground crews wait for the rest." });
       cue(12.6, () => au("bell", -5)); cue(18.2, () => au("motif", 0));
     },
@@ -380,8 +380,8 @@ function main() {
   };
 
   // ---------- reel: the count (scene 0, press and hold) ----------
-  const COUNT = { intro: 3.4, hold: 7, cuts: ["metal", "embroidery", "halftone", "stainedglass", "cells", "collage", "engraving",
-    "constellation", "ink", "xray", "blueprint", "thermal"] };
+  // three seconds of holding, six media at the reference film's half-second rhythm, ending on the honest heat map
+  const COUNT = { intro: 3.4, hold: 3, cuts: ["metal", "embroidery", "stainedglass", "halftone", "constellation", "thermal"] };
   const COUNT_END = COUNT.intro + COUNT.hold;
   const P2W = (L, x, y) => { const p = L.plane; return [p[0] + x * p[2], p[1] + y * p[2]]; };
   // holes per plane, pinned to the parts of one plane (the plane at the origin, scale 1)
@@ -405,11 +405,11 @@ function main() {
   let countShown = 0;
   REELS.count = {
     chapter: "III. The count",
-    // seven seconds of holding; everything after the count is timed from its end (COUNT_END = 10.4)
-    words: [[.5, 2.2, "In the hangars,", "top"], [2.2, 4.2, "they count every hole.", "top"], [4.3, 6.2, "Every hole", "top"], [6.2, 8.3, "on every plane", "top"],
-      [8.3, 11, "that came home.", "top"], [11.6, 15.4, "The pattern looks clear.", "top"]],
-    subs: [[10.8, 19.6, "Of the 250 planes that came home, the share hit in each part."]],
-    dur: 19.6,
+    // everything after the count is timed from its end (COUNT_END = 6.4)
+    words: [[.5, 2.2, "In the hangars,", "top"], [2.2, 4.2, "they count every hit.", "top"], [4.2, 7.2, "Every hit on every plane that came home.", "top"],
+      [7.6, 11.4, "The pattern looks clear.", "top"]],
+    subs: [[6.8, 15.6, "Of the 250 planes that came home, the share hit in each part."]],
+    dur: 15.6,
     rate: t => (t < COUNT.intro || t >= COUNT_END) ? 1 : film.hold ? 1 : 0,
     waiting: t => t >= COUNT.intro && t < COUNT_END && !film.hold,
     enter() {
@@ -419,7 +419,7 @@ function main() {
       for (let i = 1; i < n; i++) cue(COUNT.intro + i * len, () => au("tick"));
       cue(COUNT_END, () => { ui([]); au("bell", 0); film.hold = false; });
       cue(COUNT_END + .2, () => labels(zoneLabels(COUNT_END + .3)));
-      if (!YOUR.lost) subs.push({ a: 15.6, b: 19.6, text: `Your plane’s ${plural(YOUR.hits.length, "hole")} are in there too, in gold.` });
+      if (!YOUR.lost) subs.push({ a: 11.6, b: 15.6, text: `Your plane’s ${plural(YOUR.hits.length, "hit")} ${YOUR.hits.length === 1 ? "is" : "are"} in there too, in gold.` });
       cue(COUNT.intro, () => {
         ui([{ html: `<svg viewBox="0 0 26 26" aria-hidden="true"><circle class="track" cx="13" cy="13" r="11"/><circle class="fill" cx="13" cy="13" r="11"/></svg>Hold to count`,
           cls: "hold primary", onDown: () => { film.hold = true; } }]);
@@ -442,7 +442,7 @@ function main() {
     tick(t) {
       if (t >= COUNT.intro && t < COUNT_END && !film.hold && (film.down || film.spaceDown)) film.hold = true;
       if (t >= COUNT.intro && t < COUNT_END) {
-        subOverride = film.hold ? `${countShown} holes` : countShown ? "Hold to keep counting." : "Press and hold, anywhere, to count the holes.";
+        subOverride = film.hold ? `${countShown} hits` : countShown ? "Hold to keep counting." : "Press and hold, anywhere, to count the hits.";
         const b = uiEl.querySelector("button.hold");
         if (b) b.style.setProperty("--k", ((t - COUNT.intro) / COUNT.hold).toFixed(3));
       } else subOverride = null;
@@ -506,8 +506,8 @@ function main() {
     { const c = [[-.37, .24], [-.62, .05], [0, .1]][z], [sx, sy] = toScreen(film.L, [c[0], c[1]]); ripple(sx, sy); }
     ui([]); subOverride = null; frameEl.className = "";
     endWord("ask", choiceAt + .3);
-    if (z === 0) { words([[.6, 4.8, "The part with the fewest holes.", "top"]], choiceAt); subs.push({ a: choiceAt + 1, b: choiceAt + 5.6, text: "An unusual choice. Why there?" }); }
-    else { words([[.6, 4.8, "Where the holes are.", "top"]], choiceAt); subs.push({ a: choiceAt + 1, b: choiceAt + 5.6, text: "Most people choose the same." }); }
+    if (z === 0) { words([[.6, 4.8, "The part with the fewest hits.", "top"]], choiceAt); subs.push({ a: choiceAt + 1, b: choiceAt + 5.6, text: "An unusual choice. Why there?" }); }
+    else { words([[.6, 4.8, "Where the hits are.", "top"]], choiceAt); subs.push({ a: choiceAt + 1, b: choiceAt + 5.6, text: "Most people choose the same." }); }
     for (const k of [.35, .85, 1.35]) cue(choiceAt + k, () => au("clink"));
     cue(choiceAt + 2, () => au("bell", z === 0 ? 7 : 0));
   }
@@ -517,7 +517,7 @@ function main() {
   REELS.wald = {
     chapter: "V. The question",
     words: [[1, 3.2, "In New York,", "mid"], [3.2, 6.1, "a mathematician named Abraham Wald", "mid"], [6.1, 8.6, "looked at the same numbers.", "mid"],
-      [9, 11.4, "He asked a different question.", "mid"], [11.8, 13.6, "Where are the holes", "mid big"], [13.6, 15.4, "on the planes", "mid big"],
+      [9, 11.4, "He asked a different question.", "mid"], [11.8, 13.6, "Where are the hits", "mid big"], [13.6, 15.4, "on the planes", "mid big"],
       [15.4, 1e9, "that didn’t come back?", "mid big q"]],
     enter() {
       showAt = null;
@@ -542,7 +542,7 @@ function main() {
   REELS.ghosts = {
     chapter: "VI. The missing",
     cap: .8,
-    words: [[3.8, 7, "Fifty planes never came home."], [8.4, 11.4, "Nobody could count their holes."], [12, 15.2, "Wald imagined them."]],
+    words: [[3.8, 7, "Fifty planes never came home."], [8.4, 11.4, "Nobody could count their hits."], [12, 15.2, "Wald imagined them."]],
     dur: 16,
     enter() {
       au("mood", "reveal", 3);
@@ -570,7 +570,7 @@ function main() {
   REELS.reveal = {
     chapter: "VI. The missing",
     words: [[12.6, 15, "The engines.", "top big"], [15.4, 17.9, "Planes hit in the engines", "top"], [17.9, 20.6, "didn’t come home.", "top"],
-      [21.2, 23.4, "The holes you can see", "top"], [23.4, 25.6, "are where a plane can be hit", "top"], [25.6, 28.2, "and still fly home.", "top"]],
+      [21.2, 23.4, "The hits you can see", "top"], [23.4, 25.6, "are where a plane can take a hit", "top"], [25.6, 28.2, "and still fly home.", "top"]],
     subs: [[14.2, 21, "The share of planes hit in each part. Left: the 250 that came home. Right: the 50 that didn’t, as Wald imagined them."]],
     dur: 36,
     enter() {
@@ -671,13 +671,13 @@ function main() {
   function rollCredits() {
     const glsl = E.fsScene, lines = glsl.split("\n").length;
     $("#roll pre").textContent = glsl;
-    const yours = YOUR.lost ? "Your plane was lost over Germany." : `Your plane came home with ${plural(YOUR.hits.length, "hole")}.`;
+    const yours = YOUR.lost ? "Your plane was lost over Germany." : `Your plane came home with ${plural(YOUR.hits.length, "hit")}.`;
     const chose = CHOICE < 0 ? "" : ` You armoured the ${["engines", "wings and tail", "fuselage"][CHOICE]}.`;
     $("#roll .credits").innerHTML =
       `<p>What You Don’t See</p>` +
       `<p>Directed by you<small>${yours}${chose}</small></p>` +
       `<p>Written, drawn and scored with Claude<small>${lines.toLocaleString()} lines of shader code, one synthesizer, no footage.</small></p>` +
-      `<p>The reasoning is Abraham Wald’s<small>Statistical Research Group, 1943. The 300 sorties and their holes are an illustrative simulation.</small></p>`;
+      `<p>The reasoning is Abraham Wald’s<small>Statistical Research Group, 1943. The 300 sorties and their hits are an illustrative simulation.</small></p>`;
     $("#roll").classList.add("on");
     const extra = H.extras && H.extras.buttons ? H.extras.buttons({ frame: frameEl, touch }) : [];   // Explore the cost, The team
     ui([{ label: "Watch again", cls: "primary", onClick: () => { YOUR = M.pickSortie(S, Math.random, FATE); CHOICE = -1; go("open"); } },

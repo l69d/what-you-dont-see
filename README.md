@@ -1,6 +1,6 @@
 # What You Don’t See
 
-A short interactive film, about four minutes long, about the bullet holes nobody counted. Made for the **Claude Opus Build Day**.
+A short interactive film, about four minutes long, about the hits nobody counted. Made for the **Claude Opus Build Day**.
 
 **Play it:** https://l69d.github.io/what-you-dont-see/ (best with sound, on a laptop or larger screen)
 
