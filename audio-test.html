@@ -20,9 +20,12 @@
 // Renders every mood, layer and one-shot of audio.js through an OfflineAudioContext (the same _build the film uses)
 // and measures it. The report goes into <pre id="err">, and line by line to the console as "AT| ..." for a headless runner.
 // Pass: no NaN, peak below -1 dBFS, nothing silent that should sound (and "silence" silent over its last quarter).
-// Beds (and layers at level 1) should sit at -30..-20 dBFS RMS over their second half; one-shots should peak at
-// -12..-3 dBFS (their RMS is the loudest 300 ms). audio-test.html?only=bell|clink renders a subset.
-// ">80Hz" is how much of that RMS survives an 80 Hz highpass (0 dB: all of it), a proxy for laptop speakers.
+// Beds (and layers at level 1) should sit at -30..-18 dBFS RMS over their second half; one-shots should peak at
+// -16..-2 dBFS (their RMS is the loudest 300 ms): the ceiling keeps everything under -1.6 dBFS, and how each sound sits
+// in the film is audio-mix.html's job. audio-test.html?only=bell|clink renders a subset.
+// "LUFS" is the K-weighted loudness (ITU-R BS.1770) of the same stretch; for one-shots, the loudest 400 ms.
+// ">150Hz" is how much of that RMS survives a 150 Hz highpass (0 dB: all of it): what a laptop speaker can play.
+// audio-mix.html renders the whole film's cue sheet and meters it.
 (async () => {
   const A = HOLES.audio, SR = 48000, out = [];
   const say = s => { out.push(s); console.log("AT| " + s); };
@@ -41,6 +44,11 @@
     await new Promise(r => setTimeout(r, 400));
     const c = A.ctx;
     live = `init(): ready at once ${sync}, idempotent ${same}, state ${c.state}, ${c.sampleRate} Hz, clock moving ${c.currentTime > 0}, muted ${A.muted}, every call ran`;
+    for (let i = 0; i < 20; i++) A.setMute(i % 2 === 1);   // M pressed fast: ends muted
+    await c.suspend();                                      // a context the browser holds is woken by the next key or click
+    dispatchEvent(new KeyboardEvent("keydown", { key: "x" }));
+    await new Promise(r => setTimeout(r, 300));
+    live += `; mute toggled 20 times, muted ${A.muted}; suspended, then a key: ${c.state}`;
     A.mood("silence", .1);
   } catch (e) { live = "init() FAILED: " + e; }
 
@@ -53,6 +61,10 @@
     C("mood title, then reveal (3 s fade)", "bed", 8, (S, at) => { S.mood("title", .5); at(2, () => S.mood("reveal", 3)); }),
     C("mood title 20 s, roots trade at 8, 16", "bed", 20, S => S.mood("title", .5)),
     C("mood title + layers, then silence", "quiet", 6, (S, at) => { S.mood("title", .3); S.engines(.8); S.wind(.5); at(1, () => S.mood("silence", .6)); }),
+    C("mood: 12 changes in 1.2 s (<= 3 beds)", "bed", 8, (S, at, c) => {
+      moods.slice(0, 6).concat(moods.slice(0, 6)).forEach((m, i) => at(i * .1, () => S.mood(m, 3)));
+      at(1.25, () => { c.beds = S._beds(); });
+    }),
     C("engines 1", "bed", 6, S => S.engines(1)),
     C("engines .35, pan -.6", "bed", 6, S => S.engines(.35, -.6)),
     C("wind 1", "bed", 6, S => S.wind(1)),
@@ -105,22 +117,27 @@
       }
       q.get(f).push(fn);
     };
-    const run = () => c.run(S, pre ? (time, fn) => at(pre + time, fn) : at);
+    const run = () => c.run(S, pre ? (time, fn) => at(pre + time, fn) : at, c);
     if (pre) at(pre, run); else try { run(); } catch (e) { errs.push(e); }
     const buf = await ctx.startRendering();
     await new Promise(r => setTimeout(r, 150));      // let the last 'ended' events land
     return { c, buf, left: S._active(), errs };
   }
-  function highpass(d) {                             // 2nd-order Butterworth at 80 Hz
-    const w = 2 * Math.PI * 80 / SR, cw = Math.cos(w), al = Math.sin(w) * Math.SQRT1_2, a0 = 1 + al;
-    const b0 = (1 + cw) / 2 / a0, b1 = -(1 + cw) / a0, a1 = -2 * cw / a0, a2 = (1 - al) / a0, y = new Float32Array(d.length);
+  function biquad(d, b0, b1, b2, a1, a2) {
+    const y = new Float32Array(d.length);
     let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
     for (let i = 0; i < d.length; i++) {
-      const x = d[i] === d[i] ? d[i] : 0, v = b0 * x + b1 * x1 + b0 * x2 - a1 * y1 - a2 * y2;
+      const x = d[i] === d[i] ? d[i] : 0, v = b0 * x + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
       x2 = x1; x1 = x; y2 = y1; y1 = v; y[i] = v;
     }
     return y;
   }
+  function highpass(d) {                             // 2nd-order Butterworth at 150 Hz
+    const w = 2 * Math.PI * 150 / SR, cw = Math.cos(w), al = Math.sin(w) * Math.SQRT1_2, a0 = 1 + al;
+    return biquad(d, (1 + cw) / 2 / a0, -(1 + cw) / a0, (1 + cw) / 2 / a0, -2 * cw / a0, (1 - al) / a0);
+  }
+  const kweight = d => biquad(biquad(d, 1.53512485958697, -2.69169618940638, 1.19839281085285, -1.69065929318241, .73248077421585),
+    1, -2, 1, -1.99004745483398, .99007225036621);   // BS.1770 at 48 kHz
   const B = SR / 100;                                // 10 ms blocks
   function blocks(chs) {
     const e = new Float64Array(Math.ceil(chs[0].length / B));
@@ -134,25 +151,26 @@
       const x = Math.abs(d[i]);
       if (x !== x) nan = true; else { if (x > peak) peak = x; if (i >= tail && x > peak2) peak2 = x; }
     }
-    const e = blocks(chs), eh = blocks(chs.map(highpass)), nb = e.length;
+    const e = blocks(chs), eh = blocks(chs.map(highpass)), ek = blocks(chs.map(kweight)), nb = e.length;
     let from = nb >> 1, len = nb - from;
-    if (c.kind === "shot") {                         // the loudest 300 ms
-      len = Math.min(30, nb); let best = -1;
-      for (let i = 0; i + len <= nb; i++) { let s = 0; for (let j = i; j < i + len; j++) s += e[j]; if (s > best) { best = s; from = i; } }
-    }
-    const sum = a => { let s = 0; for (let i = from; i < from + len; i++) s += a[i]; return s; };
+    const loudest = (a, n) => { let best = -1, at = 0; for (let i = 0; i + n <= nb; i++) { let s = 0; for (let j = i; j < i + n; j++) s += a[j]; if (s > best) { best = s; at = i; } } return at; };
+    if (c.kind === "shot") { len = Math.min(30, nb); from = loudest(e, len); }   // the loudest 300 ms
+    const sum = (a, f = from, n = len) => { let s = 0; for (let i = f; i < f + n; i++) s += a[i]; return s; };
     const rms = Math.sqrt(sum(e) / (len * B * 2)), hi = dB(Math.sqrt(sum(eh) / (len * B * 2))) - dB(rms);
+    const kn = c.kind === "shot" ? Math.min(40, nb) : len, kf = c.kind === "shot" ? loudest(ek, kn) : from;
+    const lufs = -.691 + 10 * Math.log10(sum(ek, kf, kn) / (kn * B) || 1e-12);
     const P = dB(peak), R = dB(rms), silent = (c.kind === "quiet" ? peak2 : peak) < 1e-3;
     const bad = [], warn = [];
+    if (c.beds > 3) bad.push(c.beds + " beds sounding at once");
     if (errs.length) bad.push("threw: " + errs[0]);
     if (nan) bad.push("NaN");
     if (P >= -1) bad.push("clips");
     if (c.kind === "quiet" ? !silent : silent) bad.push(c.kind === "quiet" ? "not silent" : "silent");
-    if (c.kind === "bed" && (R < -30 || R > -20)) warn.push("RMS off target");
-    if (c.kind === "shot" && (P < -12 || P > -3)) warn.push("peak off target");
+    if (c.kind === "bed" && (R < -30 || R > -18)) warn.push("RMS off target");
+    if (c.kind === "shot" && (P < -16 || P > -2)) warn.push("peak off target");
     if (c.kind !== "mix" && left) warn.push(left + " voices never ended");
-    const status = bad.length ? "FAIL " + bad.join(", ") : warn.length ? "warn " + warn.join(", ") : c.kind === "mix" ? `ok (${left} voices still sounding)` : "ok";
-    return { line: c.name.padEnd(36) + num(P) + num(R) + num(hi) + (nan ? "  yes" : "   no") + (silent ? "     yes" : "      no") + "  " + status, bad: bad.length, warn: warn.length };
+    const status = bad.length ? "FAIL " + bad.join(", ") : warn.length ? "warn " + warn.join(", ") : c.kind === "mix" ? `ok (${left} voices still sounding)` : c.beds ? `ok (${c.beds} beds at most)` : "ok";
+    return { line: c.name.padEnd(38) + num(P) + num(R) + num(lufs) + num(hi) + (nan ? "  yes" : "   no") + (silent ? "     yes" : "      no") + "  " + status, bad: bad.length, warn: warn.length };
   }
 
   const t0 = performance.now();
@@ -160,7 +178,7 @@
   const rows = results.map(measure), fails = rows.filter(r => r.bad).length, warns = rows.filter(r => r.warn).length;
   say(live);
   say("");
-  say("name".padEnd(36) + "peak dBFS".padStart(9) + " RMS dBFS" + "   >80Hz" + "  NaN" + "  silent" + "  status");
+  say("name".padEnd(38) + "peak dBFS".padStart(9) + " RMS dBFS" + "     LUFS" + "   >150Hz" + "  NaN" + "  silent" + "  status");
   rows.forEach(r => say(r.line));
   say("");
   say(`${rows.length} renders in ${((performance.now() - t0) / 1000).toFixed(1)} s: ${fails ? fails + " FAILED" : "all pass"}, ${warns} off target`);

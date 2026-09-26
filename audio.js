@@ -11,30 +11,32 @@
   const clamp = (x, a, b) => Math.min(b, Math.max(a, +x || 0));
 
   // The score stays around D. A bed is an upper voicing (MIDI notes) held on detuned oscillator pairs through two
-  // slowly breathing lowpass filters (left and right), over a root: a pad voice plus a sub sine an octave below.
+  // slowly breathing lowpass filters (left and right), over a root: a pad voice plus a sub sine an octave below
+  // (for the two lowest roots, in unison with it: a sub under 49 Hz only costs headroom).
   // With two roots, they trade places every `period` seconds under the same upper notes, so D minor add9 becomes
   // B-flat major 7 #11 and back. The motif, A4 E5 D5 A5, sits inside every one of these chords.
   const MOODS = {
     title:    { root: [38, 34], period: 8, notes: [57, 62, 65, 76], wave: "sawtooth", cut: 800 },               // Dm add9 / B-flat maj7 #11
-    dawn:     { root: [38, 43], period: 10, notes: [57, 66, 69, 76], wave: "triangle", cut: 2600, bloom: 6 },    // D add9 / G maj13: sunrise
-    raid:     { root: [26], notes: [45, 50, 53, 63], wave: "sawtooth", cut: 420, level: .8 },                    // D minor, flat 2: dread
+    dawn:     { root: [38, 43], period: 10, notes: [57, 66, 69, 76], wave: "triangle", cut: 2600, bloom: 6, level: .9 }, // D add9 / G maj13: sunrise
+    raid:     { root: [26], notes: [45, 50, 53, 63], wave: "sawtooth", cut: 520, level: .8 },                    // D minor, flat 2: dread
     home:     { root: [31, 36], period: 9, notes: [50, 58, 65, 69], wave: "sawtooth", cut: 950 },                // G minor 9 / C 13 sus
     hangar:   { root: [33, 29], period: 12, notes: [52, 60, 64, 71], wave: "triangle", cut: 1500, level: .9 },   // A minor add9 / F maj7 #11
     decision: { root: [33], notes: [57, 64, 71, 74], wave: "triangle", cut: 1900, level: .75 },                  // A sus: a held breath
-    wald:     { root: [33], notes: [52, 62, 67, 71], wave: "sawtooth", cut: 750, level: .9 },                    // A9 sus4: the question
-    reveal:   { root: [34], notes: [53, 62, 69, 76], wave: "sawtooth", cut: 3200, level: 1.1, bloom: 3,          // B-flat maj7 #11, opening
+    wald:     { root: [33], notes: [52, 62, 67, 71], wave: "sawtooth", cut: 750 },                               // A9 sus4: the question
+    reveal:   { root: [34], notes: [53, 62, 69, 76], wave: "sawtooth", cut: 3200, bloom: 3,                      // B-flat maj7 #11, opening
                 wide: .9, rev: .45, shimmer: [81, 86, 88, 93] },                                                 //   up, with high glints
     echo:     { root: [38, 34], period: 10, notes: [57, 65, 72, 76], wave: "triangle", cut: 1100, level: .75 },  // D minor 9 / B-flat maj9 #11
     credits:  { root: [38, 43], period: 10, notes: [57, 64, 66, 69], wave: "sawtooth", cut: 1300, level: .9 },   // D add9 / G maj13: resolved
   };
   const MOTIF = [69, 76, 74, 81];
-  // one-shots: [shortest gap between two calls (s), most voices of this kind at once, level]; 24 voices in all
-  const LIM = { flak: [.05, 8, .35], hit: [.03, 6, .34], fighter: [.3, 3, .25], boom: [.15, 3, .44], stamp: [.012, 12, .32],
-    tick: [.025, 4, .35], clink: [.05, 4, .36], bell: [.1, 4, .42], whoosh: [.08, 3, .5], riser: [.25, 2, .45],
-    heartbeat: [.25, 3, .55], claim: [.4, 2, .53], motif: [.04, 8, .45] };
+  // one-shots: [shortest gap between two calls (s), most voices of this kind at once, level]; 24 voices in all.
+  // Balanced against beds around -22 LUFS: accents (motif, bell, clink, claim) peak 4-6 LU above them, impacts 8-12.
+  const LIM = { flak: [.05, 8, .31], hit: [.03, 6, .34], fighter: [.3, 3, .25], boom: [.15, 3, .44], stamp: [.012, 12, .32],
+    tick: [.025, 4, .55], clink: [.05, 4, .2], bell: [.1, 7, .24], whoosh: [.08, 3, .5], riser: [.25, 2, .45],
+    heartbeat: [.25, 3, .55], claim: [.4, 2, .34], motif: [.04, 8, .35] };
   const MAX_VOICES = 24;
   // mix levels: pad oscillator, sub sine, shimmer partial, and the whole bed
-  const PAD = .05, SUB = .05, SHIM = .03, BED = .42;
+  const PAD = .05, SUB = .05, SHIM = .03, BED = .56;
 
   function build(ctx, dest) {
     const sr = ctx.sampleRate, now = () => ctx.currentTime;
@@ -48,23 +50,33 @@
     const WHITE = makeBuf(2, 2, sr, d => { for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; });
     const BROWN = makeBuf(1, 6, sr, d => {
       const n = d.length - 1;
-      let y = 0, m = 0;
+      let y = 0, m = 0, mean = 0;
       for (let i = 0; i <= n; i++) d[i] = y = (y + .02 * (Math.random() * 2 - 1)) / 1.02;
       const drift = d[n] - d[0];
-      for (let i = 0; i <= n; i++) { d[i] -= drift * i / n; m = Math.max(m, Math.abs(d[i])); }   // loops without a click
+      for (let i = 0; i <= n; i++) mean += (d[i] -= drift * i / n) / (n + 1);   // loops without a click...
+      for (let i = 0; i <= n; i++) m = Math.max(m, Math.abs(d[i] -= mean));    // ...and without DC (the ramp alone left one)
       for (let i = 0; i <= n; i++) d[i] /= m;
     });
     const CRACKLE = makeBuf(1, 3, sr, d => {
       for (let k = 0; k < 120; k++) {
         const at = Math.floor(Math.random() * d.length), len = Math.floor(rnd(.0003, .004) * sr);
         const a = Math.pow(Math.random(), 2.5) * (Math.random() < .5 ? -1 : 1);
-        for (let j = 0; j < len && at + j < d.length; j++) d[at + j] += a * (Math.random() * 2 - 1) * Math.exp(-5 * j / len);
+        // each pop opens over a quarter of a millisecond: a crackle, not a one-sample digital step
+        for (let j = 0; j < len && at + j < d.length; j++) d[at + j] += a * (Math.random() * 2 - 1) * Math.exp(-5 * j / len) * Math.min(1, j / 12);
       }
     });
     // Shepard-Risset control signals for the tension layer: a pitch ramp and a loudness window, 4 octaves per 48 s
     const SH_N = 4, SH_P = 48, CR = 8000;
     const RAMP = makeBuf(1, SH_P, CR, d => { for (let i = 0; i < d.length; i++) d[i] = i / d.length; });
     const WIN = makeBuf(1, SH_P, CR, d => { for (let i = 0; i < d.length; i++) d[i] = Math.pow(Math.sin(Math.PI * i / d.length), 2); });
+    // a bed with two roots trades them every `period` seconds, for as long as it plays (the title idles for hours):
+    // one looping envelope per root, the root-0 one already up at the start
+    const XF = {};
+    const xfade = (P, j) => XF[P + ":" + j] || (XF[P + ":" + j] = makeBuf(1, 2 * P, CR, d => {
+      const a = 1 - Math.exp(-1 / (CR * .4));
+      let y = 0;
+      for (let pass = 0; pass < 2; pass++) for (let i = 0; i < d.length; i++) { y += a * (+((i / CR + 1.2) % (2 * P) < P === !j) - y); if (pass) d[i] = y; }
+    }));
     // reverb: 3.5 s of decaying stereo noise (-60 dB at the end) that darkens as it fades, after a 15 ms pre-delay
     const IR = makeBuf(2, 3.5, sr, d => {
       let y = 0;
@@ -75,20 +87,30 @@
       }
     });
     const curve = (n, f) => { const c = new Float32Array(n); for (let i = 0; i < n; i++) c[i] = f(i / (n - 1) * 2 - 1); return c; };
-    // the ceiling: unity up to -3 dBFS, then a smooth shoulder that never passes 0.88 (-1.1 dBFS); input range +-4
-    const CEIL = curve(8193, u => { const x = Math.abs(u * 4), k = .7, c = .88; return Math.sign(u) * (x < k ? x : k + (c - k) * Math.tanh((x - k) / (c - k))); });
+    // the ceiling: unity up to -3.6 dBFS, then a smooth shoulder that never passes 0.83 (-1.6 dBFS, so the true peak,
+    // between samples, stays under -1 dBTP); input range +-4
+    const CEIL = curve(8193, u => { const x = Math.abs(u * 4), k = .66, c = .83; return Math.sign(u) * (x < k ? x : k + (c - k) * Math.tanh((x - k) / (c - k))); });
     const TANH = curve(1025, u => Math.tanh(2.5 * u) / Math.tanh(2.5));
+    const QDB = q => 20 * Math.log10(q);            // a lowpass or highpass Q is in dB in WebAudio
 
-    // ---------- master chain: bus -> compressor -> ceiling -> master (mute) -> destination ----------
+    // ---------- master chain: bus -> 30 Hz highpass -> compressor -> ceiling -> master (mute) -> destination ----------
+    // The highpass (4th-order Butterworth) takes out DC and the rumble below hearing, which laptop speakers can't play
+    // but the compressor would still duck everything for. Chrome's compressor adds its own makeup gain (+4.8 dB here).
     const bus = ctx.createGain(), comp = ctx.createDynamicsCompressor(), pre = ctx.createGain(), ceil = ctx.createWaveShaper(), master = ctx.createGain();
+    const hp = [.541, 1.307].map(q => { const f = ctx.createBiquadFilter(); f.type = "highpass"; f.frequency.value = 30; f.Q.value = QDB(q); return f; });
     comp.threshold.value = -18; comp.knee.value = 12; comp.ratio.value = 3; comp.attack.value = .003;
     comp.release.value = .001; comp.release.setValueAtTime(.25, now() + .05);   // Chrome's compressor starts closed; open it at once
+    bus.gain.value = 1.3;                           // the drive into the compressor: beds +2.3 dB, peaks +0.8 dB
     pre.gain.value = .25; ceil.curve = CEIL;
-    bus.connect(comp).connect(pre).connect(ceil).connect(master).connect(dest);
+    bus.connect(hp[0]).connect(hp[1]).connect(comp).connect(pre).connect(ceil).connect(master).connect(dest);
     // one shared reverb, fed by sends
     const revIn = ctx.createGain(), revHp = ctx.createBiquadFilter(), conv = ctx.createConvolver();
     revHp.type = "highpass"; revHp.frequency.value = 140; conv.buffer = IR;
     revIn.connect(revHp).connect(conv).connect(bus);
+
+    // sine waves starting at eight phases: slow LFOs that all started at phase 0 would swell and sag together (every
+    // bed rose for its first 10 s, then sank 4-6 dB); made once, since building a wave costs the main thread
+    const PHASES = [...Array(8)].map((_, k) => ctx.createPeriodicWave(new Float32Array([0, Math.sin(k * Math.PI / 4)]), new Float32Array([0, Math.cos(k * Math.PI / 4)])));
 
     // ---------- node groups: every node made through a group is disconnected when its last source ends ----------
     function group(done) {
@@ -111,7 +133,8 @@
         play(buf, t0, t1, off = Math.random() * buf.duration, rate = 1) {
           const s = ctx.createBufferSource(); s.buffer = buf; s.loop = true; s.playbackRate.value = rate; return G.src(s, t0, t1, off);
         },
-        lfo(param, rate, depth, t0, t1) { const o = G.osc("sine", rate, t0, t1); o.connect(G.gain(depth)).connect(param); return o; },
+        wobble(f, t0, t1) { const o = ctx.createOscillator(); o.setPeriodicWave(PHASES[Math.random() * 8 | 0]); o.frequency.value = f; return G.src(o, t0, t1); },
+        lfo(param, rate, depth, t0, t1) { const o = G.wobble(rate, t0, t1); o.connect(G.gain(depth)).connect(param); return o; },
         stop(t) { srcs.forEach(s => { try { s.stop(t); } catch (e) { /* already stopping */ } }); },
       };
       return G;
@@ -133,7 +156,7 @@
       v.end = v.t + dur;
       v.panner = v.pan(clamp(pan, -1, 1)); v.panner.connect(bus);
       v.out = v.gain(lvl * level); v.out.connect(v.panner);
-      v.out.gain.setTargetAtTime(0, v.end - .05, .01);
+      v.out.gain.setTargetAtTime(0, v.end - .06, .008);   // -65 dB by the time the sources stop
       if (rev) v.out.connect(v.gain(rev)).connect(revIn);
       return v;
     }
@@ -172,12 +195,13 @@
     }
 
     // four radial engines: two pairs of detuned sawtooth drones at the propellers' blade rate (about 64 Hz, so they
-    // beat), plus brown-noise rumble, each pair throbbing with its propellers (20.3 and 21.4 Hz, so the pairs beat too)
+    // beat), plus brown-noise rumble, each pair throbbing with its propellers (20.3 and 21.4 Hz, so the pairs beat too).
+    // The 64 Hz fundamental is only support (a laptop can't play it); the growl is in the harmonics, 128-600 Hz.
     function makeEngines() {
-      const L = newLayer(.17), { G, t } = L, lps = [];
+      const L = newLayer(.19), { G, t } = L, lps = [];
       L.pan = G.pan(0); L.p = 0;
       L.out.disconnect(); L.out.connect(L.pan).connect(bus);
-      const drift = G.osc("sine", .05, t);            // engine speeds wander, so the beating never settles
+      const drift = G.wobble(.05, t);                 // engine speeds wander, so the beating never settles
       [[1, 1.0035, -.35, 20.3], [.9968, 1.0071, .35, 21.4]].forEach(([r1, r2, p, am]) => {
         const amp = G.gain(.65), lp = G.filter("lowpass", 420, .9), rum = G.filter("lowpass", 120, .9);
         for (const r of [r1, r2]) {
@@ -185,13 +209,13 @@
           drift.connect(G.gain(rnd(-10, 10))).connect(o.detune);
           o.connect(G.gain(.6)).connect(lp);
         }
-        G.play(BROWN, t).connect(rum).connect(amp);
-        lp.connect(amp);
+        G.play(BROWN, t).connect(rum).connect(G.gain(.5)).connect(amp);
+        lp.connect(G.filter("highpass", 90, QDB(.707))).connect(amp);   // the fundamental down 7 dB, the harmonics kept
         G.lfo(amp.gain, am, .3, t);
         amp.connect(G.pan(p)).connect(L.out);
         lps.push(lp);
       });
-      L.set = (v, t, tc) => lps.forEach(f => f.frequency.setTargetAtTime(170 + 330 * v, t, tc));   // distance muffles
+      L.set = (v, t, tc) => lps.forEach(f => f.frequency.setTargetAtTime(200 + 440 * v, t, tc));   // distance muffles
       return L;
     }
     // high-altitude wind: gusting band of stereo noise, a faint whistle, and low buffeting
@@ -209,7 +233,7 @@
     }
     // tension: a Shepard-Risset glissando of bowed minor seconds (D against E-flat) that rises forever
     function makeTension() {
-      const L = newLayer(.16), { G, t } = L;
+      const L = newLayer(.13), { G, t } = L;
       const lp = G.filter("lowpass", 1200, .5), trem = G.gain(.8), l = G.pan(-.45), r = G.pan(.45);
       l.connect(lp); r.connect(lp); lp.connect(trem).connect(L.out);
       L.out.connect(G.gain(.3)).connect(revIn);
@@ -236,15 +260,17 @@
       G.play(WHITE, t).connect(G.filter("bandpass", 1600, .6)).connect(G.gain(.08)).connect(L.out);
       const hp = G.filter("highpass", 1000, .7), crk = G.gain(0);
       G.play(CRACKLE, t).connect(hp); G.play(CRACKLE, t, undefined, undefined, .77).connect(hp);
-      hp.connect(crk).connect(L.out);
-      L.set = (v, t, tc) => { lp.frequency.setTargetAtTime(250 + 900 * v, t, tc); crk.gain.setTargetAtTime(1.5 * v, t, tc); };
+      hp.connect(G.filter("lowpass", 6500, QDB(.707))).connect(crk).connect(L.out);   // wood, not digital ticks
+      L.set = (v, t, tc) => { lp.frequency.setTargetAtTime(250 + 900 * v, t, tc); crk.gain.setTargetAtTime(1.2 * v, t, tc); };
       return L;
     }
 
     // ---------- score beds ----------
-    let bed = null, moodName = null;
+    let bed = null, moodName = null, beds = 0;
+    const fading = [];
     function makeBed(m, t) {
-      const G = group(), out = G.gain(0), w = m.wide || .6;
+      beds++;
+      const G = group(() => beds--), out = G.gain(0), w = m.wide || .6;
       out.connect(bus); out.connect(G.gain(m.rev || .25)).connect(revIn);
       const sides = [-w, w].map((p, s) => {
         const lp = G.filter("lowpass", m.cut, .6);
@@ -256,7 +282,7 @@
       // one note: a detuned pair, left and right, breathing on its own slow cycle, into `to` (default: the filters)
       const pair = (n, to = sides) => {
         const bd = G.gain(PAD * .45);
-        G.osc("sine", rnd(.025, .08), t).connect(bd);
+        G.wobble(rnd(.025, .08), t).connect(bd);
         sides.forEach((lp, s) => {
           const g = G.gain(PAD);
           bd.connect(g.gain);
@@ -264,12 +290,12 @@
         });
       };
       m.notes.forEach(n => pair(n));
-      m.root.forEach((r, j) => {                       // root voice + sub; two roots cross-fade every period
-        const xs = [0, 1, 2].map(() => G.gain(j ? 0 : 1));
+      m.root.forEach((r, j) => {                       // root voice + sub; two roots trade places every period
+        const xs = [0, 1, 2].map(() => G.gain(m.root.length > 1 ? 0 : 1));
         xs[0].connect(sides[0]); xs[1].connect(sides[1]); xs[2].connect(out);
-        if (m.root.length > 1) for (let k = 1; k <= 40; k++) xs.forEach(x => x.gain.setTargetAtTime(k % m.root.length === j ? 1 : 0, t + k * m.period, .4));
+        if (m.root.length > 1) { const x = G.play(xfade(m.period, j), t, undefined, 0); xs.forEach(g => x.connect(g.gain)); }
         pair(r + 12, xs);
-        G.osc("sine", mtof(r), t).connect(G.gain(SUB)).connect(xs[2]);
+        G.osc("sine", mtof(r < 31 ? r + 12 : r), t).connect(G.gain(SUB)).connect(xs[2]);   // support, never below G1 (49 Hz)
       });
       if (m.shimmer) {                                 // high partials that fade in and glint
         const sh = G.gain(0);
@@ -288,13 +314,15 @@
     const S = {
       ctx, master, bus,
       _active: () => active,
+      _beds: () => beds,
 
       mood(name, s = 3) {
         const m = MOODS[name];
         if ((m && name === moodName) || (!m && name !== "silence")) return;
         moodName = name;
         const t = now(), tc = Math.max(+s || 0, .05) / 3;
-        if (bed) { bed.out.gain.setTargetAtTime(0, t, tc); bed.stop(t + tc * 8 + .1); }
+        if (bed) { bed.out.gain.setTargetAtTime(0, t, tc); bed.stop(t + tc * 8 + .1); fading.push(bed); }
+        while (fading.length > 2) { const b = fading.shift(); b.out.gain.setTargetAtTime(0, t, .015); b.stop(t + .1); }   // called fast: three beds at most
         bed = null;
         if (!m) { for (const k in layers) fade(layers[k], 0, tc); return; }
         bed = makeBed(m, t);
@@ -315,7 +343,7 @@
         near = clamp(near, 0, 1);
         const v = voice("flak", pan, .45 - .3 * near, 2.2 + (1 - near)); if (!v) return;
         const t = v.t, L = .3 + .7 * near;
-        sweep(tone(v, "sine", 90, t, .9 * L, .16 + .14 * (1 - near), .004).frequency, t, 90 + 40 * near, 34, .4);
+        sweep(tone(v, "sine", 90, t, .5 * L, .16 + .14 * (1 - near), .004).frequency, t, 90 + 40 * near, 45, .4);
         const n = v.play(WHITE, t, v.end), lp = v.filter("lowpass", 400, .5), ng = v.gain(0);
         sweep(lp.frequency, t, 600 + 3000 * near * near, 110, 1.3);
         strike(ng.gain, t, .75 * L, .12 + .38 * (1 - near), .006);
@@ -345,27 +373,28 @@
       fighter(pan = 0) {
         const D = 2.8, tp = 1.15, N = 96, P = clamp(pan, -1, 1), dir = P < 0 ? -1 : 1;
         const v = voice("fighter", 0, .3, D + .05); if (!v) return;
-        const t = v.t, amp = new Float32Array(N), ratio = new Float32Array(N), cut = new Float32Array(N), pn = new Float32Array(N);
+        const t = v.t, n = v.play(WHITE, t, v.end);   // a source first: if a curve below throws, the voice still ends and frees its slot
+        const amp = new Float32Array(N), ratio = new Float32Array(N), cut = new Float32Array(N), pn = new Float32Array(N);
         for (let i = 0; i < N; i++) {
           const s = i / (N - 1) * D, x = 5.5 * (s - tp), r = Math.sqrt(1 + x * x), rad = x / r;
           amp[i] = Math.min(1, s / .25, (D - s) / .3) * Math.pow(r, -1.3);
           ratio[i] = 1 / (1 + .17 * rad);
           cut[i] = 500 + 5200 / (r * r);
-          pn[i] = clamp(P + .8 * rad * dir, -1, 1);
+          pn[i] = clamp(P + .45 * rad * dir, -1, 1);   // it dives down the screen, so it drifts, it doesn't cross
         }
         v.panner.pan.setValueCurveAtTime(pn, t, D);
         const eng = v.gain(0), lp = v.filter("lowpass", 800, 1.2), rough = v.gain(.7);
         eng.gain.setValueCurveAtTime(amp, t, D);
         lp.frequency.setValueCurveAtTime(cut, t, D);
         const f0 = rnd(105, 125);
-        for (const [k, type, a] of [[1, "sawtooth", .5], [1.506, "sawtooth", .3], [.5, "square", .25], [19, "triangle", .05]]) {
+        for (const [k, type, a] of [[1, "sawtooth", .5], [1.506, "sawtooth", .3], [.5, "square", .15], [19, "triangle", .05]]) {
           const o = v.osc(type, f0 * k, t, v.end);
           o.frequency.setValueCurveAtTime(ratio.map(q => q * f0 * k), t, D);
           o.connect(v.gain(a)).connect(lp);
         }
         v.lfo(rough.gain, 31, .3, t, v.end);          // engine roughness
         lp.connect(rough).connect(eng).connect(v.out);
-        const n = v.play(WHITE, t, v.end), bp = v.filter("bandpass", 1000, .8);
+        const bp = v.filter("bandpass", 1000, .8);
         bp.frequency.setValueCurveAtTime(cut.map(c => c * .6 + 300), t, D);
         n.connect(bp).connect(v.gain(.5)).connect(eng);
         // guns: a burst of eight rounds, about 15 a second
@@ -379,14 +408,14 @@
       },
 
       // a deep cinematic impact: a saturated sub drop (its harmonics carry it on small speakers), a mid thud,
-      // a noise blast closing down, and a crack on top
-      boom() {
-        const v = voice("boom", 0, .35, 5); if (!v) return;
+      // a noise blast closing down, and a crack on top. k (0..1.25) rides its level, so the biggest hit can stay the biggest.
+      boom(k = 1) {
+        const v = voice("boom", 0, .35, 5, clamp(k, 0, 1.25)); if (!v) return;
         const t = v.t, o = v.osc("sine", 100, t, v.end), og = v.gain(0);
         sweep(o.frequency, t, 100, 30, 1.6);
         strike(og.gain, t, 1, .7, .005);
-        o.connect(og).connect(v.shaper(TANH)).connect(v.gain(.8)).connect(v.out);
-        sweep(tone(v, "triangle", 190, t, .35, .3, .004).frequency, t, 190, 52, .8);
+        o.connect(og).connect(v.shaper(TANH)).connect(v.gain(.65)).connect(v.out);
+        sweep(tone(v, "triangle", 190, t, .5, .3, .004).frequency, t, 190, 52, .8);
         const n = v.play(WHITE, t, v.end), lp = v.filter("lowpass", 3500, .6), ng = v.gain(0);
         sweep(lp.frequency, t, 3500, 90, 2.2);
         strike(ng.gain, t, .6, .55, .004);
@@ -397,11 +426,13 @@
       },
 
       // a bullet hole stamped onto the drawing: a small tuned tock. i walks up A minor pentatonic (A4 C5 D5 E5 G5),
-      // so a fast run becomes a ripple; the faster the run, the softer each stamp, like a roll. At most 83 a second.
-      stamp(i = 0) {
+      // so a fast run becomes a ripple; the faster the run, the softer each stamp, like a roll, but a run still swells
+      // as it speeds up (about +7 dB from 3 to 60 a second). k (0..1), how far a run has got, swells it further
+      // (+8 dB from 0 to 1): a director calling once a frame runs at 60 a second from the start. At most 83 a second.
+      stamp(i = 0, k = 1) {
         i = Math.abs(Math.floor(+i || 0));
         const gap = now() - (lastT.stamp ?? -1e9);
-        const v = voice("stamp", rnd(-.35, .35), .12, .25, Math.sqrt(clamp(gap / .15, .05, 1))); if (!v) return;
+        const v = voice("stamp", rnd(-.35, .35), .12, .25, Math.pow(clamp(gap / .15, .08, 1), .3) * (.4 + .6 * clamp(k, 0, 1))); if (!v) return;
         const t = v.t, f = 440 * Math.pow(2, [0, 3, 5, 7, 10][i % 5] / 12);
         sweep(tone(v, "sine", f, t, .35, .045, .001).frequency, t, f * 1.5, f, .01);
         tone(v, "sine", f * 2.76, t, .12, .015, .001);
@@ -436,9 +467,10 @@
         for (const m of [76, 81]) tone(v, "sine", mtof(m), t, .05, 1.2, .05);
       },
 
-      // a warm church-bell spectrum (hum, prime, minor-third tierce, quint, nominal...), the low partials in beating pairs
-      bell(pitch = 0) {
-        const v = voice("bell", rnd(-.1, .1), .45, 14); if (!v) return;
+      // a warm church-bell spectrum (hum, prime, minor-third tierce, quint, nominal...), the low partials in beating pairs;
+      // k (0..1) rides its level, for bells that ring over each other
+      bell(pitch = 0, k = 1) {
+        const v = voice("bell", rnd(-.1, .1), .45, 10, clamp(k, 0, 1)); if (!v) return;   // its longest partial is 30 dB down by then
         const t = v.t, f = mtof(50 + (+pitch || 0));
         for (const [r, a, d] of [[.5, .2, 2.8], [1, .3, 2.2], [1.19, .16, 1.7], [1.5, .1, 1.3], [2, .24, 1.8], [2.51, .08, .9], [2.66, .06, .8], [3.01, .05, .6], [4.17, .04, .4]]) {
           const g = v.gain(0);
@@ -484,19 +516,19 @@
         lp.connect(trem).connect(env);
         const s = v.osc("sine", 40, t, v.end);
         sweep(s.frequency, t, 40, 75, T);
-        s.connect(v.gain(.35)).connect(env);
+        s.connect(v.gain(.25)).connect(env);
       },
 
       // lub-dub: two low thumps, each with a body an octave up and a soft knock, so small speakers carry it
       heartbeat() {
         const v = voice("heartbeat", 0, .1, 1); if (!v) return;
-        const t = v.t, lp = v.filter("lowpass", 500, .7), n = v.play(WHITE, t, v.end), ng = v.gain(0);
+        const t = v.t, lp = v.filter("lowpass", 900, .7), n = v.play(WHITE, t, v.end), ng = v.gain(0);
         lp.connect(v.out);
-        n.connect(v.filter("lowpass", 700, .7)).connect(ng).connect(v.out);
+        n.connect(v.filter("lowpass", 1200, .7)).connect(ng).connect(v.out);
         for (const [dt, k] of [[0, 1], [.27, .72]]) {
-          sweep(tone(v, "sine", 75, t + dt, .75 * k, .075, .006).frequency, t + dt, 75, 40, .12);
-          sweep(tone(v, "triangle", 150, t + dt, .5 * k, .045, .006, lp).frequency, t + dt, 150, 95, .1);
-          strike(ng.gain, t + dt, .25 * k, .015, .003);
+          sweep(tone(v, "sine", 75, t + dt, .45 * k, .075, .006).frequency, t + dt, 75, 40, .12);
+          sweep(tone(v, "square", 170, t + dt, .6 * k, .05, .006, lp).frequency, t + dt, 170, 105, .1);
+          strike(ng.gain, t + dt, .35 * k, .015, .003);
         }
       },
 
@@ -547,7 +579,7 @@
         S = build(ctx, ctx.destination);
         S.master.gain.value = A.muted ? 0 : 1;
         A.ready = true;
-        const wake = () => { if (ctx.state !== "running") ctx.resume(); };
+        const wake = () => { if (ctx.state !== "running") ctx.resume().catch(() => {}); };   // held, or interrupted: the next click or key
         for (const e of ["pointerdown", "keydown", "touchend"]) addEventListener(e, wake, true);
         started = Promise.race([ctx.resume().catch(() => {}), new Promise(r => setTimeout(r, 1000))]).then(() => A);
       } catch (e) {

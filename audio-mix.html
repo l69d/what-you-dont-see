@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Audio mix</title>
+<style>
+  html, body { margin: 0; background: #0c0c0d; color: #d8d8d8; font: 12px/1.45 Menlo, Consolas, monospace; }
+  body { padding: 16px; }
+  #err { margin: 0; white-space: pre; overflow-x: auto; }
+  canvas { display: block; width: 100%; height: 240px; margin: 0 0 10px; background: #141416; }
+  button { font: inherit; margin: 0 6px 10px 0; background: #1d1d20; color: #ddd; border: 1px solid #3a3a40; border-radius: 3px; padding: 2px 8px; cursor: pointer; }
+</style>
+</head>
+<body>
+<canvas id="plot" width="1600" height="240"></canvas>
+<div id="play"></div>
+<pre id="err">rendering the film's sound...</pre>
+<script src="model.js"></script>
+<script src="audio.js"></script>
+<script>
+// The whole film's sound, mixed down offline and metered like a mix stage.
+// It replays film.js's au() cues for one typical run (the plane lost, wings and tail chosen, the count held at once,
+// Show me pressed at once, then 30 s of credits and 20 s back on the title) through the same _build the film uses,
+// renders it with an OfflineAudioContext, and reports, per chapter and per second:
+//   loudness (ITU-R BS.1770 K-weighting: momentary 400 ms, short-term 3 s, integrated with gating, loudness range),
+//   true peak (4x oversampled), bass share (energy below 150 Hz, against everything above it, Linkwitz-Riley split),
+//   clicks (one-sample steps: jumps above -48 dBFS, 10x the jumps around them, as sharp as a step), DC offset, and
+//   stereo balance (right minus left, K-weighted).
+// Targets: integrated -18..-16 LUFS, true peak <= -1 dBTP, no chapter > 6 LU above its neighbours except the climaxes
+// (the raid and the reveal), the reveal the loudest moment, no clicks. The report goes into <pre id="err"> and, line by
+// line, to the console as "AM| ..."; the title ends in PASS or FAIL. audio-mix.html?stems also renders the score, the
+// layers and the effects on their own, to show what masks what; ?seed=N picks the noise (the same N renders the same
+// mix, sample for sample). Keep the cue sheet in step with film.js.
+(async () => {
+  const H = window.HOLES, M = H.model, SR = 48000, FPS = 60, Q = new URLSearchParams(location.search), stems = Q.has("stems");
+  Math.random = M.rng(+(Q.get("seed") || 1));      // audio.js draws all its noise and variation from Math.random
+  const out = [], say = s => { out.push(s); console.log("AM| " + s); };
+  const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x)), lerp = (a, b, k) => a + (b - a) * k;   // film.js helpers
+  const seg = (t, a, b) => clamp((t - a) / (b - a)), ez = x => (x = clamp(x), x * x * (3 - 2 * x));
+  const hash = i => { const s = Math.sin(i * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
+  const dB = x => x > 0 ? 20 * Math.log10(x) : -Infinity, f1 = (x, w = 6) => (isFinite(x) ? x.toFixed(1) : "-inf").padStart(w);
+
+  // ---------- the run ----------
+  const S = M.simulate(), RET = S.retHoles;
+  const YOUR = M.pickSortie(S, M.rng(3), "lost"), CHOICE = 1, CLAIM = 14.5, CHOSE = 6.6, SHOW = 16.6;
+  const LOST_HOLES = S.holes.map((h, i) => ({ ...h, seed: (i * 0.6180339887) % 1 })).filter(h => h.lost);
+  const landAt = h => h.ghost * .16 + ((h.seed * 7.3) % 1) * .45 + 1.5;
+  const sky = (() => {                              // scene-sky.js schedule(): when your hits land
+    const n = YOUR.hits.length, f = YOUR.fatal, T = [];
+    const tf = f === 0 ? 15.2 : Math.min(18.2, 15.4 + 2.8 * f / Math.max(1, n - 1)), m = n - f - 1;
+    for (let k = 0; k < f; k++) T.push(14.1 + (tf - .5 - 14.1) * (k + .5) / f);
+    T.push(tf);
+    for (let j = 0; j < m; j++) T.push(tf + .6 + (21 - tf - .6) * (j + .5) / m);
+    return { flak: 0, fighters: 6, otherHit: 9, yourHits: T.map(x => Math.round(x * 100) / 100), fatal: Math.round(tf * 100) / 100, drop: 19, turn: 22, end: 32 };
+  })();
+  const touchdown = k => k < 19 ? 2.4 + 5.9 * k / 18 : k === 19 ? 9 : 9.7 + 2 * (k - 20) / 9;   // scene-field.js plans()
+  const MONTAGE = (() => {                          // film.js schedule() for the open's 18 media
+    const n = 18, d = [...Array(n)].map((_, i) => lerp(.7, .34, i / (n - 1))), k = 8.4 / d.reduce((a, b) => a + b);
+    let a = 3.2; return d.map(x => { const s = a; a += x * k; return s; });
+  })();
+
+  // ---------- the cue sheet: film.js's au() calls, reel by reel ----------
+  const reels = [];
+  let T0 = 0;
+  function reel(id, dur, body) {                    // cues past a reel's end never fire: go() drops them
+    const ev = [], at = T0, cue = (t, ...call) => { if (t <= dur) ev.push([at + t, call]); };
+    const frames = (a, b, f) => { for (let i = Math.ceil(a * FPS); i < b * FPS; i++) f(i / FPS); };
+    body(cue, frames);
+    reels.push({ id, t0: T0, t1: T0 + dur, ev });
+    T0 += dur;
+  }
+  reel("open", 21, cue => {
+    cue(0, "mood", "dawn", 4);
+    MONTAGE.forEach(t => cue(t, "tick"));
+    cue(9.1, "riser", 2.6); cue(11.7, "boom", .7); cue(14.6, "bell", 0);
+    cue(19.2, "mood", "silence", 2);
+  });
+  reel("raid", CLAIM + sky.end, cue => {
+    const b = sky, c0 = CLAIM, hits = b.yourHits;
+    cue(0, "mood", "dawn", 2); cue(0, "engines", .7, 0); cue(0, "wind", .3);
+    cue(c0, "claim"); cue(c0, "mood", "raid", 3);
+    const flakRate = c => c < 6 ? .4 + 2.6 * ez(c / 6) : c < 14 ? 1.5 : c < b.turn ? 2.5 : 1.5 * (1 - seg(c, b.turn, b.turn + 6));
+    for (let c = .1, i = 0; c < b.turn; i++, c += (.5 + hash(i + 20)) / flakRate(c)) cue(c0 + b.flak + c, "flak", hash(i + 40) * 2 - 1, hash(i + 80) * .8);
+    for (const [k, pan] of [[-.16, .7], [.44, -.1], [1.89, -.35], [4.14, .6]]) cue(c0 + b.fighters + k, "fighter", pan);
+    cue(c0 + b.otherHit, "boom", .75);
+    hits.forEach((h, k) => { const pan = YOUR.hits[k].x * .28; cue(c0 + h - .04, "flak", pan, .85); cue(c0 + h, "hit", pan); });
+    cue(c0 + b.flak, "tension", .35); cue(c0 + b.fighters, "tension", .7);
+    cue(c0 + hits[0], "tension", 1);
+    cue(c0 + b.fatal, "boom", .85); cue(c0 + b.fatal, "fire", .8); cue(c0 + b.drop, "whoosh");
+    cue(c0 + b.turn, "tension", 0); cue(c0 + b.turn, "mood", "silence", 4); cue(c0 + b.turn, "fire", 0); cue(c0 + b.turn, "wind", .5);
+    cue(c0 + b.end - 1.4, "engines", 0); cue(c0 + b.end - 1.4, "wind", 0); cue(c0 + b.end - 1.4, "fire", 0);
+    for (const k of ["engines", "wind", "tension", "fire"]) cue(c0 + b.end, k, 0);   // exit()
+  });
+  reel("home", 21.5, (cue, frames) => {
+    cue(0, "mood", "home", 3); cue(0, "engines", .45, 0);
+    cue(12.6, "bell", -5); cue(18.2, "motif", 0);
+    let last = -1;                                  // tick(): engines(.45 * (1 - landed / 30)) every frame; only changes matter
+    frames(0, 21.5, t => { let n = 0; for (let k = 0; k < 30; k++) if (t >= touchdown(k)) n++; if (n !== last) cue(t, "engines", .45 * (1 - n / 30), 0); last = n; });
+    cue(21.5, "engines", 0);                        // exit()
+  });
+  reel("count", 19.6, (cue, frames) => {
+    cue(0, "mood", "hangar", 2.5); cue(0, "engines", 0);
+    for (let i = 1; i < 12; i++) cue(3.4 + i * 7 / 12, "tick");
+    cue(10.4, "bell", 0);
+    let last = 0;
+    frames(0, 19.6, t => {                          // tick(): a stamp on every frame the count grows
+      const n = Math.floor(RET * Math.pow(clamp(t - 3.4, 0, 7) / 7, 1.35));
+      if (n > last) cue(t, "stamp", n, n / RET);
+      last = n;
+    });
+  });
+  reel("decide", CHOSE + 5.6, cue => {
+    cue(0, "mood", "decision", 2);
+    for (const k of [.35, .85, 1.35]) cue(CHOSE + k, "clink");
+    cue(CHOSE + 2, "bell", CHOICE === 0 ? 7 : 0);
+  });
+  reel("wald", SHOW + 1.3, cue => {
+    cue(0, "mood", "wald", 2);
+    cue(11.6, "heartbeat"); cue(13.4, "heartbeat"); cue(13.4, "riser", 3);
+    for (const k of [18, 19.8, 21.6]) if (k < SHOW) cue(k, "heartbeat");
+    cue(SHOW, "boom", .8);
+  });
+  reel("ghosts", 16, cue => {
+    cue(0, "mood", "reveal", 3);
+    [0, 2, 5, 7, 12, 14].forEach((p, i) => cue(.6 + i * .6, "bell", p, .7));
+    cue(3, "whoosh");
+  });
+  reel("reveal", 36, cue => {
+    cue(0, "mood", "reveal", 1);
+    for (const h of LOST_HOLES) cue(4 + landAt(h), "stamp", h.order);
+    cue(8.4, "riser", 3.6); cue(12, "mood", "silence", .5);
+    cue(12.6, "boom", 1.25); cue(12.6, "bell", 0); cue(12.6, "mood", "reveal", 1);
+    [15.4, 17.9, 21.2, 25.6].forEach((t, i) => cue(t, "motif", i));
+    for (const k of [30.8, 31.3, 31.8]) cue(k, "clink");
+    cue(32.4, "bell", 12);
+  });
+  reel("echo", 32.5, cue => {
+    cue(0, "mood", "echo", 2);
+    for (const t of [2.8, 6.9, 11, 15.1]) cue(t, "tick");
+    cue(19.2, "bell", 0); cue(26.8, "motif", 3);
+  });
+  reel("credits", 30, cue => { cue(0, "mood", "credits", 3); cue(13.4, "motif", 0); });
+  reel("title", 20, cue => cue(0, "mood", "title", 3));
+  const FILM = reels.filter(r => r.id !== "title"), CLIMAX = ["raid", "reveal"];
+
+  // ---------- render ----------
+  const LAYERS = ["engines", "wind", "tension", "fire"];
+  const STEMS = { mix: () => true, score: c => c[0] === "mood", layers: c => LAYERS.includes(c[0]) || (c[0] === "mood" && c[1] === "silence"), effects: c => c[0] !== "mood" && !LAYERS.includes(c[0]) };
+  async function render(keep) {
+    const ctx = new OfflineAudioContext(2, Math.ceil(T0 * SR), SR), A = H.audio._build(ctx, ctx.destination), q = new Map(), errs = [];
+    for (const r of reels) for (const [t, call] of r.ev) {
+      if (!keep(call)) continue;
+      const f = Math.max(1, Math.round(t * SR / 128));   // suspend() works on render quanta
+      if (!q.has(f)) {
+        q.set(f, []);
+        ctx.suspend(f * 128 / SR).then(() => { for (const c of q.get(f)) try { A[c[0]](...c.slice(1)); } catch (e) { errs.push(c[0] + ": " + e); } ctx.resume(); });
+      }
+      q.get(f).push(call);
+    }
+    const buf = await ctx.startRendering();
+    return { buf, errs, left: A._active() };
+  }
+
+  // ---------- meters ----------
+  function biquad(b0, b1, b2, a1, a2) { let x1 = 0, x2 = 0, y1 = 0, y2 = 0; return x => { const y = b0 * x + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2; x2 = x1; x1 = x; y2 = y1; y1 = y; return y; }; }
+  function butter(type, f) {                        // RBJ cookbook, Q = 1/sqrt 2
+    const w = 2 * Math.PI * f / SR, c = Math.cos(w), al = Math.sin(w) * Math.SQRT1_2, a0 = 1 + al, k = type === "lp" ? (1 - c) / 2 : (1 + c) / 2;
+    return biquad(k / a0, (type === "lp" ? 1 - c : -(1 + c)) / a0, k / a0, -2 * c / a0, (1 - al) / a0);
+  }
+  // 4x true-peak interpolator: a windowed sinc whose phase 0 is the samples themselves; phases 1-3 fall between them
+  const TPH = [1, 2, 3].map(p => { const h = []; for (let k = -8; k < 8; k++) { const x = k + p / 4, w = .42 + .5 * Math.cos(Math.PI * x / 8.5) + .08 * Math.cos(2 * Math.PI * x / 8.5); h.push(Math.sin(Math.PI * x) / (Math.PI * x) * w); } return h; });
+  const BL = SR / 10;                               // 100 ms blocks
+  function analyse(buf) {
+    const n = buf.length, nb = Math.ceil(n / BL);
+    const K = new Float64Array(nb), LO = new Float64Array(nb), HI = new Float64Array(nb), DC = [new Float64Array(nb), new Float64Array(nb)], KC = [new Float64Array(nb), new Float64Array(nb)];
+    const PK = new Float64Array(nb), TP = new Float64Array(nb), clicks = [];
+    for (let c = 0; c < 2; c++) {
+      const x = buf.getChannelData(c);
+      const k1 = biquad(1.53512485958697, -2.69169618940638, 1.19839281085285, -1.69065929318241, .73248077421585);
+      const k2 = biquad(1, -2, 1, -1.99004745483398, .99007225036621);
+      const lp1 = butter("lp", 150), lp2 = butter("lp", 150), hp1 = butter("hp", 150), hp2 = butter("hp", 150);
+      for (let i = 0; i < n; i++) {
+        const v = x[i], b = (i / BL) | 0, kw = k2(k1(v)), lo = lp2(lp1(v)), hi = hp2(hp1(v));
+        K[b] += kw * kw; KC[c][b] += kw * kw; LO[b] += lo * lo; HI[b] += hi * hi; DC[c][b] += v;
+        const a = Math.abs(v); if (a > PK[b]) PK[b] = a;
+      }
+      for (let b = 0; b < nb; b++) {                // true peak, where it could matter (within 12 dB of full scale)
+        if (PK[b] < .25) { TP[b] = Math.max(TP[b], PK[b]); continue; }
+        for (let i = Math.max(8, b * BL), e = Math.min(n - 8, (b + 1) * BL); i < e; i++) {
+          let m = Math.abs(x[i]);
+          for (const h of TPH) { let s = 0; for (let k = 0; k < 16; k++) s += h[k] * x[i + 8 - k]; if (Math.abs(s) > m) m = Math.abs(s); }
+          if (m > TP[b]) TP[b] = m;
+        }
+      }
+      // clicks: one-sample steps. A jump above -48 dBFS, 10x the jumps within 5 ms around it, that bends the waveform
+      // as sharply as it jumps (a steep but smooth edge, like a bright sawtooth bed's, bends far less)
+      const W = 240, sq = i => { const d = x[i] - x[i - 1]; return d * d; };
+      let sum = 0;
+      for (let i = 1; i <= 2 * W + 1 && i < n; i++) sum += sq(i);
+      let lastClick = -1e9;
+      for (let i = W + 1; i < n - W - 1; i++) {
+        if (i > W + 1) sum += sq(i + W) - sq(i - W - 1);
+        const d = Math.abs(x[i] - x[i - 1]);
+        if (d < .004) continue;
+        let near = 0; for (let j = i - 3; j <= i + 3; j++) near += sq(j);
+        const rms = Math.sqrt(Math.max(0, sum - near) / (2 * W - 6));
+        const bend = Math.max(Math.abs(x[i] - 2 * x[i - 1] + x[i - 2]), Math.abs(x[i + 1] - 2 * x[i] + x[i - 1]));
+        if (d > 10 * rms && bend > .6 * d && i - lastClick > SR * .01) { clicks.push({ t: i / SR, c, d, r: d / Math.max(rms, 1e-9) }); lastClick = i; }
+      }
+    }
+    return { nb, K, KC, LO, HI, DC, PK, TP, clicks };
+  }
+  const lufs = ms => ms > 0 ? -.691 + 10 * Math.log10(ms) : -Infinity;
+  function loudness(m, b0, b1) {                    // momentary blocks (400 ms, 100 ms hop) from b0 to b1: integrated (gated) and max
+    const Mb = [];
+    for (let b = b0; b + 4 <= b1; b++) Mb.push((m.K[b] + m.K[b + 1] + m.K[b + 2] + m.K[b + 3]) / (4 * BL));
+    const g1 = Mb.filter(v => lufs(v) > -70), mean = a => a.reduce((p, q) => p + q, 0) / (a.length || 1);
+    const rel = lufs(mean(g1)) - 10, g2 = g1.filter(v => lufs(v) > rel);
+    return { I: lufs(mean(g2)), Mmax: lufs(Math.max(0, ...Mb)) };
+  }
+  const st = (m, b) => { let s = 0; for (let j = Math.max(0, b - 29); j <= b; j++) s += m.K[j]; return lufs(s / (30 * BL)); };   // short-term, ending with block b
+  function lra(m, b0, b1) {
+    const v = []; for (let b = b0 + 29; b < b1; b++) v.push(st(m, b));
+    const g1 = v.filter(x => x > -70), I = lufs(g1.reduce((p, x) => p + Math.pow(10, (x + .691) / 10), 0) / (g1.length || 1));
+    const g2 = g1.filter(x => x > I - 20).sort((a, b) => a - b), pc = p => g2[Math.min(g2.length - 1, Math.floor(p * g2.length))];
+    return g2.length ? pc(.95) - pc(.1) : 0;
+  }
+  const sumOf = (a, b0, b1) => { let s = 0; for (let b = b0; b < b1; b++) s += a[b]; return s; };
+  const maxOf = (a, b0, b1) => { let s = 0; for (let b = b0; b < b1; b++) s = Math.max(s, a[b]); return s; };
+  const bass = (m, b0, b1) => { const lo = sumOf(m.LO, b0, b1), hi = sumOf(m.HI, b0, b1); return lo + hi > 0 ? 100 * lo / (lo + hi) : 0; };
+  const blk = t => Math.round(t * 10);
+
+  // ---------- run ----------
+  const t0 = performance.now(), mix = await render(STEMS.mix), rt = (performance.now() - t0) / 1000;
+  const m = analyse(mix.buf), F0 = blk(FILM[0].t0), F1 = blk(FILM[FILM.length - 1].t1);
+  const film = loudness(m, F0, F1), filmTP = dB(maxOf(m.TP, F0, F1)), filmPK = dB(maxOf(m.PK, F0, F1));
+  const rows = reels.map(r => {
+    const b0 = blk(r.t0), b1 = blk(r.t1), L = loudness(m, b0, b1);
+    let stMax = -Infinity; for (let b = b0 + 29; b < b1; b++) stMax = Math.max(stMax, st(m, b));
+    const dc = Math.max(...m.DC.map(d => Math.abs(sumOf(d, b0, b1)) / ((b1 - b0) * BL)));
+    const lr = 10 * Math.log10(sumOf(m.KC[1], b0, b1) / sumOf(m.KC[0], b0, b1));
+    return { r, ...L, stMax, tp: dB(maxOf(m.TP, b0, b1)), bass: bass(m, b0, b1), clicks: m.clicks.filter(c => c.t >= r.t0 && c.t < r.t1).length, dc, lr };
+  });
+  const byId = Object.fromEntries(rows.map(x => [x.r.id, x]));
+
+  say(`Full film, one typical run: the plane lost (sortie ${YOUR.id}, ${YOUR.hits.length} hits), wings and tail, the count held at once, Show me at once.`);
+  say(`${T0.toFixed(1)} s at ${SR / 1000} kHz rendered in ${rt.toFixed(1)} s. ${mix.errs.length ? "THREW: " + mix.errs[0] : "No call threw."} ${mix.left} one-shot voices still sounding at the end.`);
+  say("");
+  say(`film (open to credits): integrated ${f1(film.I, 0)} LUFS, true peak ${f1(filmTP, 0)} dBTP (sample peak ${f1(filmPK, 0)} dBFS), loudness range ${f1(lra(m, F0, F1), 0)} LU, max momentary ${f1(film.Mmax, 0)} LUFS, bass below 150 Hz ${bass(m, F0, F1).toFixed(0)}% of the energy, ${m.clicks.length} clicks`);
+  say("");
+  say("chapter      start   len  I LUFS  max ST  max M  TP dBTP  bass %  clicks  DC dBFS  R-L dB");
+  for (const x of rows) say(x.r.id.padEnd(10) + f1(x.r.t0, 8) + f1(x.r.t1 - x.r.t0, 6) + f1(x.I, 8) + f1(x.stMax, 8) + f1(x.Mmax, 7) + f1(x.tp, 9) + f1(x.bass, 8) + String(x.clicks).padStart(8) + f1(dB(x.dc), 9) + f1(x.lr, 8));
+
+  // ---------- verdict ----------
+  const bad = [], note = [];
+  if (!(film.I >= -18.5 && film.I <= -15.5)) bad.push(`integrated ${film.I.toFixed(1)} LUFS, outside -18..-16`);
+  if (filmTP > -1) bad.push(`true peak ${filmTP.toFixed(1)} dBTP, above -1`);
+  FILM.forEach((r, i) => {
+    const x = byId[r.id];
+    if (CLIMAX.includes(r.id)) return;
+    for (const nb of [FILM[i - 1], FILM[i + 1]]) if (nb && x.I - byId[nb.id].I > 6) bad.push(`${r.id} is ${(x.I - byId[nb.id].I).toFixed(1)} LU above ${nb.id}`);
+  });
+  const peakST = rows.filter(x => x.r.id !== "title").reduce((a, b) => b.stMax > a.stMax ? b : a);
+  if (peakST.r.id !== "reveal") (byId.reveal.stMax < peakST.stMax - 1 ? bad : note).push(`the loudest 3 s are in ${peakST.r.id} (${peakST.stMax.toFixed(1)} LUFS), the reveal peaks at ${byId.reveal.stMax.toFixed(1)}`);
+  if (m.clicks.length) bad.push(`${m.clicks.length} clicks`);
+  if (mix.errs.length) bad.push("a call threw");
+  say("");
+  say((bad.length ? "FAIL: " + bad.join("; ") : "PASS: every target met") + (note.length ? " (note: " + note.join("; ") + ")" : ""));
+  for (const r of reels) m.clicks.filter(c => c.t >= r.t0 && c.t < r.t1).slice(0, 3).forEach(c => {
+    const i = Math.round(c.t * SR), x = mix.buf.getChannelData(c.c), near = [...x.slice(i - 4, i + 4)].map(v => v.toFixed(4)).join(" ");
+    say(`  click at ${c.t.toFixed(4)} s (${r.id} ${(c.t - r.t0).toFixed(3)}), ${c.c ? "right" : "left"}, jump ${c.d.toFixed(4)}, ${c.r.toFixed(0)}x its surroundings: ${near}`);
+  });
+
+  // ---------- stems: what masks what ----------
+  if (stems) {
+    say("");
+    say("stems, integrated LUFS (and bass %) per chapter, each through its own master chain");
+    say("chapter       mix         score        layers       effects");
+    const S3 = {};
+    for (const k of ["score", "layers", "effects"]) { const s = await render(STEMS[k]); S3[k] = analyse(s.buf); }
+    for (const x of rows) say(x.r.id.padEnd(10) + f1(x.I, 7) + f1(x.bass, 4) + "%" + ["score", "layers", "effects"].map(k => {
+      const b0 = blk(x.r.t0), b1 = blk(x.r.t1); return f1(loudness(S3[k], b0, b1).I, 8) + f1(bass(S3[k], b0, b1), 4) + "%";
+    }).join(""));
+  }
+
+  // ---------- per second ----------
+  say("");
+  say("per second: short-term loudness (3 s ending then), max momentary, true peak, bass share, clicks");
+  say("   t  chapter      ST      M     TP  bass%  clk");
+  for (let s = 0; s < Math.floor(T0); s++) {
+    const b0 = s * 10, b1 = b0 + 10, r = reels.find(r => s >= r.t0 - 1e-6 && s < r.t1), mm = loudness(m, Math.max(0, b0 - 3), b1).Mmax;
+    say(String(s).padStart(4) + "  " + r.id.padEnd(9) + f1(st(m, b1 - 1), 7) + f1(mm, 7) + f1(dB(maxOf(m.TP, b0, b1)), 7) + f1(bass(m, b0, b1), 7) + String(m.clicks.filter(c => c.t >= s && c.t < s + 1).length).padStart(5));
+  }
+  document.getElementById("err").textContent = out.join("\n");
+  document.title = "Audio mix: " + (bad.length ? "FAIL" : "PASS");
+
+  // ---------- the picture: short-term loudness over the film, chapters, and the target band ----------
+  const cv = document.getElementById("plot"), g = cv.getContext("2d"), W = cv.width, Hh = cv.height, X = t => t / T0 * W, Y = l => Hh * (-(l + 8) / 40);
+  g.font = "13px Menlo, monospace";
+  reels.forEach((r, i) => { g.fillStyle = i % 2 ? "#18181b" : "#141416"; g.fillRect(X(r.t0), 0, X(r.t1) - X(r.t0), Hh); g.fillStyle = "#777"; g.fillText(r.id, X(r.t0) + 4, 14); });
+  g.fillStyle = "rgba(217,178,106,.12)"; g.fillRect(0, Y(-16), W, Y(-18) - Y(-16));
+  for (let l = -10; l >= -40; l -= 10) { g.fillStyle = "#444"; g.fillRect(0, Y(l), W, 1); g.fillText(l + "", W - 30, Y(l) - 3); }
+  g.strokeStyle = "#d9b26a"; g.lineWidth = 2; g.beginPath();
+  for (let b = 29; b < m.nb; b++) { const l = Math.max(-48, st(m, b)); b === 29 ? g.moveTo(X(b / 10), Y(l)) : g.lineTo(X(b / 10), Y(l)); }
+  g.stroke();
+  g.fillStyle = "#e06050"; for (let b = 0; b < m.nb; b++) if (dB(m.TP[b]) > -3) g.fillRect(X(b / 10) - 1, Y(dB(m.TP[b]) + 0) , 3, 3);
+
+  const b = document.createElement("button");
+  let player, playing;
+  b.textContent = "play the mixdown";
+  b.onclick = () => { player = player || new AudioContext(); if (playing) playing.stop(); playing = player.createBufferSource(); playing.buffer = mix.buf; playing.connect(player.destination); playing.start(); };
+  document.getElementById("play").appendChild(b);
+  window.mixdown = { buf: mix.buf, m, reels };
+  say("DONE");
+})();
+</script>
+</body>
+</html>

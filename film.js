@@ -20,7 +20,9 @@ function main() {
   const au = (k, ...a) => { try { const A = H.audio; if (A && A.ready && typeof A[k] === "function") A[k](...a); } catch (e) { console.warn(e); } };
 
   // ---------- data ----------
-  const S = M.simulate(), ST = M.stats(S), f1 = v => v.toFixed(1);
+  const S = M.simulate(), SH = M.shareHit(S), pct = v => Math.round(v * 100) + "%";
+  // the thermal medium fills each part with its share (uP[0] came home, uP[1] lost), blended in by uP[2]
+  const zoneFill = (L, back, lost = 0) => L.P.set([SH[0].back, SH[1].back, SH[2].back, 0, SH[0].lost, SH[1].lost, SH[2].lost, 0, back, lost, 0, 0], 0);
   const RET = S.retHoles, LOST = S.lostHoles;
   let YOUR = S.sorties.find(s => !s.lost), CHOICE = -1;
   const ZONE_BUTTONS = [[1, "Wings and tail"], [2, "Fuselage"], [0, "Engines"]];
@@ -195,7 +197,7 @@ function main() {
   // ---------- reel: title ----------
   let compiling = null, compiled = false;   // the shaders compile in the background while the title shows
   REELS.title = {
-    words: [[0, 1e9, "What We Don’t See", "big mid"]],
+    words: [[0, 1e9, "What You Don’t See", "big mid"]],
     subs: [[0, 1e9, "A short film you play. About four minutes, with sound."]],
     enter() {
       au("mood", "title", 3);
@@ -237,14 +239,14 @@ function main() {
   let OPEN = [];
   REELS.open = {
     words: [[1.2, 3.1, "1943."], [3.3, 5.5, "Every plane"], [5.5, 7.8, "that comes home"], [7.8, 9.7, "brings back"],
-      [9.7, 11.9, "a story."], [14.6, 19.4, "What We Don’t See", "big mid"]],
+      [9.7, 11.9, "a story."], [14.6, 19.4, "What You Don’t See", "big mid"]],
     dur: 21,
     enter() {
       OPEN = schedule(MONTAGE, 3.2, 11.6, REDUCED ? .9 : .7, REDUCED ? .9 : .34);
       openFrame();
       au("mood", "dawn", 4);
       for (const s of OPEN) cue(s.a, () => au("tick"));
-      cue(9.1, () => au("riser", 2.6)); cue(11.7, () => au("boom")); cue(14.6, () => au("bell", 0));
+      cue(9.1, () => au("riser", 2.6)); cue(11.7, () => au("boom", .7)); cue(14.6, () => au("bell", 0));
       cue(19.2, () => au("mood", "silence", 2));
     },
     layers(t, L, P) {
@@ -327,18 +329,22 @@ function main() {
       subs.push({ a: c0 + lastHit + 1.2, b: c0 + lastHit + 4, text: "Still flying." });
       words([[b.turn + .6, b.turn + 5, "Turning for home.", "mid"]], c0);
     }
-    // sound: flak builds, fighters scream through, your hits land, then the turn for home
-    for (let i = 0; i < 30; i++) {
-      const at = b.flak + (b.turn - b.flak) * Math.pow(i / 30, .8) + hash(i) * .4;
-      cue(c0 + at, () => au("flak", hash(i + 40) * 2 - 1, hash(i + 80) * .8));
-    }
-    for (const k of [.3, 1.1, 1.8, 2.6]) cue(c0 + b.fighters + k, () => au("fighter", hash(k * 9) * 2 - 1));
-    cue(c0 + b.otherHit, () => au("boom"));
-    for (const h of hits) cue(c0 + h, () => au("hit", 0));
+    // sound: the flak follows the sky's own barrage at half its density (thickening for 6 s, steady through the fighters,
+    // heaviest while you're hit), each Fw 190 peaks as it passes in the picture (a fly-by peaks 1.16 s after its call),
+    // your hits land with the burst beside you, then the turn: home, or silence but for the wind
+    const flakRate = c => c < 6 ? .4 + 2.6 * ez(c / 6) : c < 14 ? 1.5 : c < b.turn ? 2.5 : 1.5 * (1 - seg(c, b.turn, b.turn + 6));
+    for (let c = .1, i = 0; c < (YOUR.lost ? b.turn : b.turn + 6); i++, c += (.5 + hash(i + 20)) / flakRate(c))
+      cue(c0 + b.flak + c, () => au("flak", hash(i + 40) * 2 - 1, hash(i + 80) * .8));
+    for (const [k, pan] of [[-.16, .7], [.44, -.1], [1.89, -.35], [4.14, .6]]) cue(c0 + b.fighters + k, () => au("fighter", pan));
+    cue(c0 + b.otherHit, () => au("boom", .75));
+    hits.forEach((h, k) => {
+      const pan = YOUR.hits[k] ? YOUR.hits[k].x * .28 : 0;
+      cue(c0 + h - .04, () => au("flak", pan, .85)); cue(c0 + h, () => au("hit", pan));
+    });
     cue(c0 + b.flak, () => au("tension", .35)); cue(c0 + b.fighters, () => au("tension", .7));
     if (hits.length) cue(c0 + hits[0], () => au("tension", 1));
-    if (YOUR.lost && b.fatal != null) { cue(c0 + b.fatal, () => { au("boom"); au("fire", .8); }); cue(c0 + (b.drop ?? 19), () => au("whoosh")); }
-    cue(c0 + b.turn, () => { au("tension", 0); au("mood", YOUR.lost ? "silence" : "dawn", 4); if (YOUR.lost) au("fire", 0); });
+    if (YOUR.lost && b.fatal != null) { cue(c0 + b.fatal, () => { au("boom", .85); au("fire", .8); }); cue(c0 + (b.drop ?? 19), () => au("whoosh")); }
+    cue(c0 + b.turn, () => { au("tension", 0); au("mood", YOUR.lost ? "silence" : "dawn", 4); if (YOUR.lost) { au("fire", 0); au("wind", .5); } });
     cue(c0 + b.end - 1.4, () => { au("engines", 0); au("wind", 0); au("fire", 0); });
   }
 
@@ -380,17 +386,17 @@ function main() {
   // holes per plane, pinned to the parts of one plane (the plane at the origin, scale 1)
   function zoneLabels(a) {
     return [
-      { w: [.8, .15], big: f1(ST[1].back), small: "Wings and tail", a },
-      { w: [.36, -.4], big: f1(ST[2].back), small: "Fuselage", a: a + .25 },
-      { w: [-.49, .4], big: f1(ST[0].back), small: "Engines", a: a + .5 },
+      { w: [.8, .15], big: pct(SH[1].back), small: "hit in the wings and tail", a },
+      { w: [.36, -.4], big: pct(SH[2].back), small: "hit in the fuselage", a: a + .25 },
+      { w: [-.49, .4], big: pct(SH[0].back), small: "hit in the engines", a: a + .5 },
     ];
   }
   // the reveal: the engine number is the hero; the rest sits under each copy
   function revealLabels(a, split) {
-    const line = w => `Per plane: wings and tail ${f1(ST[1][w])}, fuselage ${f1(ST[2][w])}, engines ${f1(ST[0][w])}.`;
+    const line = w => `Hit in the wings and tail ${pct(SH[1][w])}, the fuselage ${pct(SH[2][w])}, the engines ${pct(SH[0][w])}.`;
     return [
-      { w: [-.49 - split, .4], big: f1(ST[0].back), small: "engine holes per plane", cls: "big", a: a + .4 },
-      { w: [-.49 + split, .4], big: f1(ST[0].lost), small: "engine holes per plane", cls: "big gold", a: a + .9 },
+      { w: [-.49 - split, .4], big: pct(SH[0].back), small: "hit in the engines", cls: "big", a: a + .4 },
+      { w: [-.49 + split, .4], big: pct(SH[0].lost), small: "hit in the engines", cls: "big gold", a: a + .9 },
       { w: [-split, -.76], big: "Came home", small: `250 planes. ${line("back")}`, cls: "title", below: true, stem: false, a },
       { w: [split, -.76], big: "Never came back", small: `50 planes. ${line("lost")}`, cls: "title", below: true, stem: false, a },
     ];
@@ -401,7 +407,7 @@ function main() {
     // seven seconds of holding; everything after the count is timed from its end (COUNT_END = 10.4)
     words: [[.5, 2.2, "In the hangars,", "top"], [2.2, 4.2, "they count every hole.", "top"], [4.3, 6.2, "Every hole", "top"], [6.2, 8.3, "on every plane", "top"],
       [8.3, 11, "that came home.", "top"], [11.6, 15.4, "The pattern looks clear.", "top"]],
-    subs: [[10.8, 19.6, "Holes per plane, averaged over the 250 planes that came home."]],
+    subs: [[10.8, 19.6, "Of the 250 planes that came home, the share hit in each part."]],
     dur: 19.6,
     rate: t => (t < COUNT.intro || t >= COUNT_END) ? 1 : film.hold ? 1 : 0,
     waiting: t => t >= COUNT.intro && t < COUNT_END && !film.hold,
@@ -423,6 +429,7 @@ function main() {
       const n = COUNT.cuts.length, cut = Math.min(n - 1, Math.floor(k / (COUNT.hold / n)));
       L.scene = 0; L.shape = 1;
       L.medium = t < COUNT.intro ? MID("metal") : MID(COUNT.cuts[done ? n - 1 : cut]);
+      zoneFill(L, ez(seg(t, COUNT_END + .3, COUNT_END + 1.9)));
       L.holes.ret = Math.floor(RET * Math.pow(k / COUNT.hold, 1.35));
       L.holes.fresh = film.hold || done ? 1 : .35; L.holes.gain = .12;
       L.holes.your = YOUR.lost ? -1 : YOUR.id;
@@ -438,7 +445,7 @@ function main() {
         const b = uiEl.querySelector("button.hold");
         if (b) b.style.setProperty("--k", ((t - COUNT.intro) / COUNT.hold).toFixed(3));
       } else subOverride = null;
-      if (countShown > this._last) au("stamp", countShown);
+      if (countShown > this._last) au("stamp", countShown, countShown / RET);   // the run swells as the count grows
       this._last = countShown;
     },
     _last: 0,
@@ -467,6 +474,7 @@ function main() {
     layers(t, L, P) {
       L.scene = 0; L.shape = 1; L.medium = MID("thermal");
       L.holes.ret = RET; L.holes.gain = .12; L.holes.your = YOUR.lost ? -1 : YOUR.id;
+      zoneFill(L, 1);
       L.fx2 = [hover, hoverK, 1, 0];
       L.cam = [0, .1, 2, 0];
       if (choiceAt != null) {
@@ -513,7 +521,9 @@ function main() {
     enter() {
       showAt = null;
       au("mood", "wald", 2);
-      cue(11.6, () => au("heartbeat")); cue(13.4, () => au("heartbeat")); cue(15, () => au("riser", 3));
+      cue(11.6, () => au("heartbeat")); cue(13.4, () => au("heartbeat"));
+      cue(13.4, () => au("riser", 3));                   // it lands as Show me appears; then the question hangs on a pulse
+      for (const k of [18, 19.8, 21.6]) cue(k, () => { if (showAt == null) au("heartbeat"); });
       cue(16.4, () => ui([{ label: "Show me", cls: "primary", onClick: show }]));
       cue(24, () => show());
     },
@@ -525,7 +535,7 @@ function main() {
     },
     key(k) { if (showAt == null && film.t > 16.4 && (k === " " || k === "Enter")) { show(); return true; } },
   };
-  function show() { if (showAt != null) return; showAt = film.t; ui([]); endWord("q", showAt + .6); au("boom"); ripple(FW / 2, FH / 2, true); }
+  function show() { if (showAt != null) return; showAt = film.t; ui([]); endWord("q", showAt + .6); au("boom", .8); ripple(FW / 2, FH / 2, true); }
 
   // ---------- reel: the ghosts rise (scene 3) ----------
   REELS.ghosts = {
@@ -535,7 +545,7 @@ function main() {
     dur: 16,
     enter() {
       au("mood", "reveal", 3);
-      for (let i = 0; i < 7; i++) cue(.8 + i * .45, () => au("bell", i * 2));
+      [0, 2, 5, 7, 12, 14].forEach((p, i) => cue(.6 + i * .6, () => au("bell", p, .7)));   // one as each ghost on our field rises: D E G A D E
       cue(3, () => au("whoosh"));
     },
     layers(t, L, P) {
@@ -560,12 +570,14 @@ function main() {
     chapter: "VI. The missing",
     words: [[12.6, 15, "The engines.", "top big"], [15.4, 17.9, "Planes hit in the engines", "top"], [17.9, 20.6, "didn’t come home.", "top"],
       [21.2, 23.4, "The holes you can see", "top"], [23.4, 25.6, "are where a plane can be hit", "top"], [25.6, 28.2, "and still fly home.", "top"]],
-    subs: [[14.2, 21, "Holes per plane. Left: the 250 that came home. Right: the 50 that didn’t, as Wald imagined them."]],
+    subs: [[14.2, 21, "The share of planes hit in each part. Left: the 250 that came home. Right: the 50 that didn’t, as Wald imagined them."]],
     dur: 36,
     enter() {
       au("mood", "reveal", 1);
       for (const h of LOST_HOLES) cue(4 + landAt(h), () => au("stamp", h.order));
-      cue(12.6, () => au("boom"));
+      // the rain builds, cuts to a breath with only the holes landing, and the engines hit; the chord blooms again
+      cue(8.4, () => au("riser", 3.6)); cue(12, () => au("mood", "silence", .5));
+      cue(12.6, () => { au("boom", 1.25); au("bell", 0); au("mood", "reveal", 1); });   // the film's biggest hit
       [15.4, 17.9, 21.2, 25.6].forEach((t, i) => cue(t, () => au("motif", i)));
       cue(13.6, () => labels(revealLabels(13.7, GX)));
       if (CHOICE === 0) {
@@ -588,6 +600,7 @@ function main() {
       L.holes.ret = RET; L.holes.lost = LOST; L.holes.fall = Math.max(0, t - 4); L.holes.gain = .12;
       L.holes.your = YOUR.id;
       L.fx = [1, 5, -1, 0];
+      zoneFill(L, 1, ez(seg(t, 12.4, 14.2)));
       L.fx2 = [-1, 0, 1, 50];
       // the ghosts: descend into view, release their holes one after another, then fade upward
       for (let i = 0; i < 50; i++) {
@@ -617,7 +630,7 @@ function main() {
     chapter: "VII. Everywhere",
     words: [[.5, 2.7, "It isn’t only planes.", "mid"], ...ECHO.map(e => [e.a + .3, e.b - .1, e.w]),
       [19.6, 21.8, "Every story you hear"], [21.8, 23.8, "comes from someone"], [23.8, 26.2, "who came home."],
-      [26.8, 31.6, "Look for the holes you can’t see.", "big mid"]],
+      [26.8, 31.6, "Always question what you don’t see.", "big mid"]],
     subs: [...ECHO.map(e => [e.a + .6, e.b, e.s]), [27.2, 32.5, "Survivorship bias. Abraham Wald, Statistical Research Group, New York, 1943."]],
     dur: 32.5,
     enter() {
@@ -660,7 +673,7 @@ function main() {
     const yours = YOUR.lost ? "Your plane was lost over Germany." : `Your plane came home with ${plural(YOUR.hits.length, "hole")}.`;
     const chose = CHOICE < 0 ? "" : ` You armoured the ${["engines", "wings and tail", "fuselage"][CHOICE]}.`;
     $("#roll .credits").innerHTML =
-      `<p>What We Don’t See</p>` +
+      `<p>What You Don’t See</p>` +
       `<p>Directed by you<small>${yours}${chose}</small></p>` +
       `<p>Written, drawn and scored with Claude<small>${lines.toLocaleString()} lines of shader code, one synthesizer, no footage.</small></p>` +
       `<p>The reasoning is Abraham Wald’s<small>Statistical Research Group, 1943. The 300 sorties and their holes are an illustrative simulation.</small></p>`;
